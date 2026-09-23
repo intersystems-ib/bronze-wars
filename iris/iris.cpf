@@ -1,0 +1,10 @@
+[Actions]
+CreateDatabase:Name=BRONZEWARS_DATA,Directory=/usr/irissys/mgr/BRONZEWARS_DATA,Size=4500
+
+CreateDatabase:Name=BRONZEWARS_CODE,Directory=/usr/irissys/mgr/BRONZEWARS_CODE
+
+CreateNamespace:Name=BRONZEWARS,Globals=BRONZEWARS_DATA,Routines=BRONZEWARS_CODE,Interop=1
+
+ModifyUser:Name=SuperUser,PasswordHash=9b900b7299f13b10d9aa5f41a8ce98b55f7e99831f988f596f7048e6647e4f2c3ebbcd3c104b9510a4a8707c9b864e6e550a95e269b4b1dffb8613d85c10e313,ae216ebb10fa9b741efa40fe91236be31d06af08569cca75f78cde36afeafd88505c3d4b3092238074cac14087b9c95a08214e3c0ecbf62e0527c29c82ce097d,10000,SHA512
+
+CreateApplication:Name=/api/bronzewars,NameSpace=BRONZEWARS,DispatchClass=BronzeWars.REST.Api,AutheEnabled=96,MatchRoles=:%All
