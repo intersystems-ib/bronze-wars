@@ -1,0 +1,7 @@
+export const GRAIN_BUDGET = 100;
+
+export const DEFAULT_ARMY_QUANTITIES = {
+  SPEARMEN: 4,
+  HEAVY_INFANTRY: 4,
+  LIGHT_CAVALRY: 2,
+};

@@ -3,9 +3,17 @@ do ##class(%SYSTEM.License).Upgrade()
 do ##class(SYS.Container).QuiesceForBundling()
 do ##class(Security.Users).UnExpireUserPasswords("*")
 
-zn "MUS"
-set sc = $SYSTEM.OBJ.LoadDir("/opt/irisapp/src/Mus", "ck", , 1)
-set production = "Mus.Production"
-set ^Ens.Configuration("csp","LastProduction") = production
-do ##class(Ens.Director).SetAutoStart(production)
-do ##class(Ens.Director).StartProduction(production)
+zn "BRONZEWARS"
+set sc = $SYSTEM.OBJ.LoadDir("/opt/irisapp/src/BronzeWars", "ck", , 1)
+if $SYSTEM.Status.IsError(sc) do $SYSTEM.Status.DisplayError(sc) halt
+
+set sc = ##class(BronzeWars.Data.Seed).Run()
+if $SYSTEM.Status.IsError(sc) do $SYSTEM.Status.DisplayError(sc) halt
+
+set sc = ##class(BronzeWars.Installer).ConfigureWebApplication()
+if $SYSTEM.Status.IsError(sc) do $SYSTEM.Status.DisplayError(sc) halt
+
+set sc = ##class(BronzeWars.Installer).ConfigureProduction()
+if $SYSTEM.Status.IsError(sc) do $SYSTEM.Status.DisplayError(sc) halt
+
+write !,"BronzeWars classes compiled, initial data loaded, REST application configured and production started.",!

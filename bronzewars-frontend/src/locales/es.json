@@ -1,0 +1,128 @@
+{
+  "app": {
+    "title": "BronzeWars",
+    "subtitle": "Estrategia de la Edad del Bronce",
+    "language": "Idioma",
+    "close": "Cerrar",
+    "loading": "Preparando el campo de batalla…",
+    "retry": "Reintentar",
+    "apiUnavailable": "No se ha podido contactar con BronzeWars."
+  },
+  "setup": {
+    "eyebrow": "Nueva campaña",
+    "title": "Prepara tu batalla",
+    "description": "Configura tu ejército y prepara un nuevo enfrentamiento contra la IA.",
+    "armyType": "Tipo de ejército",
+    "armyHelp": "Elige la identidad visual de tus tropas. La selección se aplicará al catálogo, al despliegue y al tablero.",
+    "available": "Disponible",
+    "name": "Nombre de la batalla",
+    "namePlaceholder": "Batalla del río",
+    "width": "Columnas",
+    "height": "Filas",
+    "create": "Crear batalla",
+    "creating": "Creando…",
+    "resumeTitle": "Continuar batalla",
+    "battleId": "Identificador",
+    "resume": "Cargar",
+    "unitTypes": "Fuerzas disponibles",
+    "strength": "Efectivos",
+    "attack": "Ataque",
+    "defense": "Defensa"
+  },
+  "navigation": {
+    "main": "Menú principal",
+    "createBattle": "Crear batalla",
+    "loadBattle": "Cargar batalla",
+    "collapse": "Contraer menú",
+    "expand": "Expandir menú",
+    "open": "Abrir menú",
+    "close": "Cerrar menú"
+  },
+  "load": {
+    "eyebrow": "Campaña existente",
+    "title": "Cargar batalla",
+    "description": "Introduce el identificador de una batalla para recuperar su estado y continuar la campaña.",
+    "idPlaceholder": "Ej. 42",
+    "loading": "Cargando…"
+  },
+  "armies": {
+    "egypt": {
+      "name": "Ejército egipcio",
+      "description": "Tropas del Egipto de la Edad del Bronce"
+    },
+    "assyria": {
+      "name": "Ejército asirio",
+      "description": "Tropas asirias disciplinadas y orientadas al choque"
+    }
+  },
+  "armyBuilder": {
+    "title": "Composición del ejército",
+    "help": "Dispones de 100 unidades de grano. Puedes repetir tropas mientras no superes el presupuesto.",
+    "loading": "Cargando tropas disponibles…",
+    "grainRemaining": "grano disponible",
+    "summary": "{{spent}} de {{total}} · {{units}} unidades",
+    "unitCost": "{{cost}} de grano",
+    "unitQuantity": "Cantidad de {{unit}}",
+    "addUnit": "Añadir {{unit}}",
+    "removeUnit": "Quitar {{unit}}",
+    "overBudget": "La composición supera las 100 unidades de grano.",
+    "emptyArmy": "Selecciona al menos una unidad."
+  },
+  "battle": {
+    "battle": "Batalla",
+    "round": "Ronda",
+    "phase": "Fase",
+    "status": "Estado",
+    "refresh": "Actualizar",
+    "newBattle": "Nueva batalla",
+    "start": "Comenzar batalla",
+    "starting": "Comenzando…",
+    "human": "Tu ejército",
+    "ai": "Ejército de la IA",
+    "ready": "Preparado",
+    "notReady": "Pendiente",
+    "selected": "Unidad seleccionada",
+    "selectInstruction": "Selecciona una unidad y después una casilla de tu zona.",
+    "moveInstruction": "Selecciona una unidad desplegada para recolocarla.",
+    "startedInstruction": "La batalla ha comenzado. El movimiento y el combate llegarán en la siguiente fase.",
+    "placing": "Desplegando unidad…",
+    "position": "Posición {{x}}, {{y}}",
+    "undeployed": "Sin desplegar",
+    "deployed": "Desplegada",
+    "deploymentComplete": "Despliegue completo. Ya puedes comenzar.",
+    "deploymentPending": "Despliega todas tus unidades para comenzar.",
+    "cell": "Casilla {{x}}, {{y}}",
+    "humanZone": "Zona humana",
+    "aiZone": "Zona IA",
+    "neutralZone": "Terreno neutral"
+  },
+  "phases": {
+    "DEPLOYMENT": "Despliegue",
+    "MOVEMENT": "Movimiento",
+    "COMBAT": "Combate",
+    "FINISHED": "Finalizada"
+  },
+  "statuses": {
+    "CREATED": "Creada",
+    "IN_PROGRESS": "En curso",
+    "FINISHED": "Finalizada",
+    "CANCELLED": "Cancelada"
+  },
+  "errors": {
+    "BATTLE_NOT_FOUND": "La batalla indicada no existe.",
+    "UNIT_NOT_FOUND": "La unidad indicada no existe.",
+    "INVALID_BATTLE_PHASE": "Esta acción no está disponible en la fase actual.",
+    "CELL_OCCUPIED": "La casilla ya está ocupada.",
+    "POSITION_OUT_OF_BOUNDS": "La posición está fuera del tablero.",
+    "POSITION_OUTSIDE_DEPLOYMENT_ZONE": "Debes desplegar la unidad dentro de tu zona.",
+    "HUMAN_DEPLOYMENT_INCOMPLETE": "Debes desplegar todas tus unidades antes de comenzar.",
+    "BATTLE_ALREADY_STARTED": "La batalla ya ha comenzado.",
+    "GRAIN_BUDGET_EXCEEDED": "La composición supera las 100 unidades de grano.",
+    "EMPTY_ARMY": "El ejército debe incluir al menos una unidad.",
+    "ARMY_TOO_LARGE": "El ejército no cabe en la zona de despliegue.",
+    "BOARD_TOO_NARROW": "El tablero debe permitir desplegar al menos cuatro unidades de IA.",
+    "INVALID_ARMY_COMPOSITION": "La composición del ejército no es válida.",
+    "INVALID_FACTION": "La facción seleccionada no es válida.",
+    "UNKNOWN_ERROR": "Se ha producido un error inesperado."
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "app": {
+    "title": "BronzeWars",
+    "subtitle": "Bronze Age strategy",
+    "language": "Language",
+    "close": "Close",
+    "loading": "Preparing the battlefield…",
+    "retry": "Try again",
+    "apiUnavailable": "BronzeWars could not be reached."
+  },
+  "setup": {
+    "eyebrow": "New campaign",
+    "title": "Prepare your battle",
+    "description": "Configure your army and prepare a new match against the AI.",
+    "armyType": "Army type",
+    "armyHelp": "Choose your troops' visual identity. The selection applies to the unit list, deployment and battlefield.",
+    "available": "Available",
+    "name": "Battle name",
+    "namePlaceholder": "Battle of the river",
+    "width": "Columns",
+    "height": "Rows",
+    "create": "Create battle",
+    "creating": "Creating…",
+    "resumeTitle": "Resume battle",
+    "battleId": "Battle ID",
+    "resume": "Load",
+    "unitTypes": "Available forces",
+    "strength": "Strength",
+    "attack": "Attack",
+    "defense": "Defense"
+  },
+  "navigation": {
+    "main": "Main menu",
+    "createBattle": "Create battle",
+    "loadBattle": "Load battle",
+    "collapse": "Collapse menu",
+    "expand": "Expand menu",
+    "open": "Open menu",
+    "close": "Close menu"
+  },
+  "load": {
+    "eyebrow": "Existing campaign",
+    "title": "Load battle",
+    "description": "Enter a battle ID to recover its state and continue the campaign.",
+    "idPlaceholder": "E.g. 42",
+    "loading": "Loading…"
+  },
+  "armies": {
+    "egypt": {
+      "name": "Egyptian army",
+      "description": "Bronze Age Egyptian troops"
+    },
+    "assyria": {
+      "name": "Assyrian army",
+      "description": "Disciplined Assyrian troops focused on shock combat"
+    }
+  },
+  "armyBuilder": {
+    "title": "Army composition",
+    "help": "You have 100 grain units. Troop types may be repeated while the army stays within budget.",
+    "loading": "Loading available troops…",
+    "grainRemaining": "grain remaining",
+    "summary": "{{spent}} of {{total}} · {{units}} units",
+    "unitCost": "{{cost}} grain",
+    "unitQuantity": "Quantity of {{unit}}",
+    "addUnit": "Add {{unit}}",
+    "removeUnit": "Remove {{unit}}",
+    "overBudget": "The composition exceeds the 100-grain budget.",
+    "emptyArmy": "Select at least one unit."
+  },
+  "battle": {
+    "battle": "Battle",
+    "round": "Round",
+    "phase": "Phase",
+    "status": "Status",
+    "refresh": "Refresh",
+    "newBattle": "New battle",
+    "start": "Start battle",
+    "starting": "Starting…",
+    "human": "Your army",
+    "ai": "AI army",
+    "ready": "Ready",
+    "notReady": "Pending",
+    "selected": "Selected unit",
+    "selectInstruction": "Select a unit and then a cell inside your deployment zone.",
+    "moveInstruction": "Select a deployed unit to reposition it.",
+    "startedInstruction": "The battle has started. Movement and combat will arrive in the next phase.",
+    "placing": "Deploying unit…",
+    "position": "Position {{x}}, {{y}}",
+    "undeployed": "Not deployed",
+    "deployed": "Deployed",
+    "deploymentComplete": "Deployment complete. You can now begin.",
+    "deploymentPending": "Deploy every unit before starting.",
+    "cell": "Cell {{x}}, {{y}}",
+    "humanZone": "Human zone",
+    "aiZone": "AI zone",
+    "neutralZone": "Neutral ground"
+  },
+  "phases": {
+    "DEPLOYMENT": "Deployment",
+    "MOVEMENT": "Movement",
+    "COMBAT": "Combat",
+    "FINISHED": "Finished"
+  },
+  "statuses": {
+    "CREATED": "Created",
+    "IN_PROGRESS": "In progress",
+    "FINISHED": "Finished",
+    "CANCELLED": "Cancelled"
+  },
+  "errors": {
+    "BATTLE_NOT_FOUND": "The requested battle does not exist.",
+    "UNIT_NOT_FOUND": "The requested unit does not exist.",
+    "INVALID_BATTLE_PHASE": "This action is unavailable during the current phase.",
+    "CELL_OCCUPIED": "That cell is already occupied.",
+    "POSITION_OUT_OF_BOUNDS": "The position is outside the board.",
+    "POSITION_OUTSIDE_DEPLOYMENT_ZONE": "Deploy the unit inside your deployment zone.",
+    "HUMAN_DEPLOYMENT_INCOMPLETE": "Deploy all your units before starting.",
+    "BATTLE_ALREADY_STARTED": "The battle has already started.",
+    "GRAIN_BUDGET_EXCEEDED": "The composition exceeds the 100-grain budget.",
+    "EMPTY_ARMY": "The army must contain at least one unit.",
+    "ARMY_TOO_LARGE": "The army does not fit in the deployment zone.",
+    "BOARD_TOO_NARROW": "The board must allow at least four AI units in the deployment zone.",
+    "INVALID_ARMY_COMPOSITION": "The army composition is invalid.",
+    "INVALID_FACTION": "The selected faction is invalid.",
+    "UNKNOWN_ERROR": "An unexpected error occurred."
+  }
+}
