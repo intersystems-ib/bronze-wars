@@ -26,6 +26,22 @@ function storeArmyDesign(battleId, designId) {
   }
 }
 
+function wait(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function moveBattleUnit(battleState, unitId, position) {
+  return {
+    ...battleState,
+    armies: battleState.armies.map((army) => ({
+      ...army,
+      units: army.units.map((unit) => (
+        String(unit.id) === String(unitId) ? { ...unit, position: { ...position } } : unit
+      )),
+    })),
+  };
+}
+
 export default function App() {
   const { t } = useI18n();
   const [unitTypes, setUnitTypes] = useState([]);
@@ -38,6 +54,9 @@ export default function App() {
   const [loadingUnitTypes, setLoadingUnitTypes] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [turnConfirmation, setTurnConfirmation] = useState(null);
+  const [deployingEnemy, setDeployingEnemy] = useState(false);
+  const [animatingUnitId, setAnimatingUnitId] = useState(null);
 
   const showError = useCallback((caughtError) => {
     setError({
@@ -99,26 +118,66 @@ export default function App() {
     });
   }
 
-  function refreshBattle() {
-    if (battle) run(() => loadBattle(battle.id));
+  function placeUnit(unitId, position) {
+    if (!battle || !unitId) return;
+    run(async () => {
+      await api.placeUnit(battle.id, unitId, position);
+      await loadBattle(battle.id);
+      setSelectedUnitId(null);
+    });
   }
 
-  function placeSelectedUnit(position) {
-    if (!battle || !selectedUnitId) return;
+  function moveUnit(unitId, position) {
+    if (!battle || !unitId) return;
     run(async () => {
-      await api.placeUnit(battle.id, selectedUnitId, position);
+      await api.moveUnit(battle.id, unitId, position);
       await loadBattle(battle.id);
     });
   }
 
-  function startBattle() {
+  async function advanceTurn(confirmIncomplete = false) {
     if (!battle) return;
-    run(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = await api.nextTurn(battle.id, confirmIncomplete);
+      setTurnConfirmation(null);
+      for (const movement of payload.aiMovementTrace || []) {
+        setAnimatingUnitId(movement.unitId);
+        for (const position of movement.path || []) {
+          setBattle((currentBattle) => moveBattleUnit(currentBattle, movement.unitId, position));
+          await wait(320);
+        }
+      }
+      setBattle(payload.battle);
+    } catch (caughtError) {
+      if (caughtError.code === 'UNITS_PENDING_MOVEMENT') {
+        setTurnConfirmation({ pendingUnits: caughtError.details?.pendingUnits || 0 });
+      } else {
+        showError(caughtError);
+      }
+    } finally {
+      setAnimatingUnitId(null);
+      setBusy(false);
+    }
+  }
+
+  async function startBattle() {
+    if (!battle) return;
+    setBusy(true);
+    setDeployingEnemy(true);
+    setError(null);
+    try {
       const payload = await api.startBattle(battle.id);
       setBattle(payload.battle);
       setDeployment(null);
       setSelectedUnitId(null);
-    });
+    } catch (caughtError) {
+      showError(caughtError);
+    } finally {
+      setDeployingEnemy(false);
+      setBusy(false);
+    }
   }
 
   function leaveBattle() {
@@ -126,6 +185,9 @@ export default function App() {
     setDeployment(null);
     setSelectedUnitId(null);
     setArmyDesignId(DEFAULT_ARMY_DESIGN_ID);
+    setTurnConfirmation(null);
+    setDeployingEnemy(false);
+    setAnimatingUnitId(null);
     setStartView('create');
   }
 
@@ -150,16 +212,30 @@ export default function App() {
             <LanguageSwitcher />
           </nav>
           {errorBanner}
+          {deployingEnemy && (
+            <div className="enemy-deployment-overlay" role="dialog" aria-modal="true" aria-labelledby="enemy-deployment-title">
+              <div className="enemy-deployment-modal panel">
+                <span className="enemy-deployment-spinner" aria-hidden="true" />
+                <strong id="enemy-deployment-title">{t('battle.enemyFormationDeploying')}</strong>
+                <span>{t('battle.enemyFormationDeployingDetail')}</span>
+              </div>
+            </div>
+          )}
           <BattleView
             battle={battle}
             armyDesignId={armyDesignId}
             deployment={deployment}
             selectedUnitId={selectedUnitId}
+            animatingUnitId={animatingUnitId}
             busy={busy}
-            onSelectUnit={(unit) => setSelectedUnitId(unit.id)}
-            onPlaceUnit={placeSelectedUnit}
+            onSelectUnit={(unit) => setSelectedUnitId(unit?.id || null)}
+            onPlaceUnit={placeUnit}
+            onMoveUnit={moveUnit}
             onStart={startBattle}
-            onRefresh={refreshBattle}
+            onNextTurn={() => advanceTurn(false)}
+            turnConfirmation={turnConfirmation}
+            onConfirmNextTurn={() => advanceTurn(true)}
+            onCancelNextTurn={() => setTurnConfirmation(null)}
             onExit={leaveBattle}
           />
           <footer>BronzeWars · InterSystems IRIS</footer>

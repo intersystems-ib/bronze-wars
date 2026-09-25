@@ -47,7 +47,30 @@ export default function ArmyBuilder({ unitTypes, quantities, armyDesignId, loadi
               <UnitArtwork unitCode={unit.code} armyDesignId={armyDesignId} className="army-unit__image" alt="" />
               <div className="army-unit__body">
                 <strong>{unit.name}</strong>
-                <span>{t('armyBuilder.unitCost', { cost: unit.grainCost })}</span>
+                <span className="army-unit__cost">{t('armyBuilder.unitCost', { cost: unit.grainCost })}</span>
+                <dl className="army-unit__stats">
+                  <div
+                    className="army-unit__stat army-unit__stat--attack"
+                    aria-label={t('armyBuilder.attackStat', { value: unit.attack })}
+                    title={t('armyBuilder.attackStat', { value: unit.attack })}
+                  >
+                    <dt aria-hidden="true">&#x1301C;</dt><dd>{unit.attack}</dd>
+                  </div>
+                  <div
+                    className="army-unit__stat army-unit__stat--defense"
+                    aria-label={t('armyBuilder.defenseStat', { value: unit.defense })}
+                    title={t('armyBuilder.defenseStat', { value: unit.defense })}
+                  >
+                    <dt aria-hidden="true">&#x1309A;</dt><dd>{unit.defense}</dd>
+                  </div>
+                  <div
+                    className="army-unit__stat army-unit__stat--movement"
+                    aria-label={t('armyBuilder.movementStat', { value: unit.speed })}
+                    title={t('armyBuilder.movementStat', { value: unit.speed })}
+                  >
+                    <dt aria-hidden="true">&#x130BB;</dt><dd>{unit.speed}</dd>
+                  </div>
+                </dl>
               </div>
               <div className="quantity-control">
                 <button

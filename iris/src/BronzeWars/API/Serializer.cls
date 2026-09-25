@@ -45,7 +45,13 @@ ClassMethod ApplyStats(value As %DynamicObject, source As %RegisteredObject)
 
 ClassMethod BattleUnit(unit As BronzeWars.Model.BattleUnit, hidePosition As %Boolean = 0) As %DynamicObject
 {
-    set value = {"id":(unit.%Id()),"name":(unit.Name),"type":(..UnitType(unit.UnitType, 0, unit.Army.Faction)),"currentStrength":(unit.CurrentStrength),"isDeployed":(unit.IsDeployed),"hasMoved":(unit.HasMoved),"active":(unit.Active)}
+    set morale = $select(unit.Morale="":100, 1:unit.Morale)
+    set movementSpent = $select(unit.MovementSpent="":0, 1:unit.MovementSpent)
+    set speed = unit.UnitType.Speed
+    if $isobject(unit.UnitProfile) set speed = unit.UnitProfile.Speed
+    set remainingMovement = speed - movementSpent
+    if remainingMovement < 0 set remainingMovement = 0
+    set value = {"id":(unit.%Id()),"name":(unit.Name),"type":(..UnitType(unit.UnitType, 1, unit.Army.Faction)),"currentStrength":(unit.CurrentStrength),"morale":(morale),"movementSpent":(movementSpent),"remainingMovement":(remainingMovement),"isDeployed":(unit.IsDeployed),"hasMoved":(unit.HasMoved),"active":(unit.Active)}
     if hidePosition || 'unit.IsDeployed {
         do value.%Set("position", "", "null")
     } else {
@@ -57,6 +63,13 @@ ClassMethod BattleUnit(unit As BronzeWars.Model.BattleUnit, hidePosition As %Boo
 ClassMethod Army(army As BronzeWars.Model.Army, hidePositions As %Boolean = 0) As %DynamicObject
 {
     set value = {"id":(army.%Id()),"side":(army.Side),"faction":(army.Faction),"name":(army.Name),"units":(##class(%DynamicArray).%New())}
+    if army.CommanderType = "" {
+        do value.%Set("commanderType", "", "null")
+        do value.%Set("commanderName", "", "null")
+    } else {
+        do value.%Set("commanderType", army.CommanderType)
+        do value.%Set("commanderName", ##class(BronzeWars.AI.Commanders.Strategy).Label(army.CommanderType))
+    }
     &sql(DECLARE UnitCursor CURSOR FOR SELECT %ID FROM BronzeWars_Model.BattleUnit WHERE Army = :armyId ORDER BY UnitType)
     set armyId = army.%Id()
     &sql(OPEN UnitCursor)

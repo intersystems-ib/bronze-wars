@@ -6,7 +6,18 @@ ClassMethod Run() As %Status
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..SeedUnitProfiles()
     return:$SYSTEM.Status.IsError(sc) sc
-    return ..SeedModifiers()
+    set sc = ..SeedModifiers()
+    return:$SYSTEM.Status.IsError(sc) sc
+    return ..BackfillBattleUnitTurnState()
+}
+
+ClassMethod BackfillBattleUnitTurnState() As %Status [ Private ]
+{
+    &sql(UPDATE BronzeWars_Model.BattleUnit SET Morale = 100 WHERE Morale IS NULL)
+    if SQLCODE < 0 return $$$ERROR($$$GeneralError, "Unable to initialize battle unit morale: " _ SQLCODE _ " " _ $get(%msg))
+    &sql(UPDATE BronzeWars_Model.BattleUnit SET MovementSpent = 0 WHERE MovementSpent IS NULL)
+    if SQLCODE < 0 return $$$ERROR($$$GeneralError, "Unable to initialize battle unit movement: " _ SQLCODE _ " " _ $get(%msg))
+    return $$$OK
 }
 
 ClassMethod SeedUnitTypes() As %Status [ Private ]
@@ -14,6 +25,8 @@ ClassMethod SeedUnitTypes() As %Status [ Private ]
     set sc = ..UpsertUnitType("LIGHT_INFANTRY", "Infantería ligera", "Escaramuceadores, honderos y tropas poco protegidas.", 100, 2, 4, 2, 2, 5, "Proyectiles ligeros")
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitType("HEAVY_INFANTRY", "Infantería pesada", "Tropas con armadura, escudos pesados, lanzas cortas y espadas.", 100, 1, 7, 9, 1, 8, "Cuerpo a cuerpo")
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitType("MERCENARIES", "Mercenarios", "Soldados profesionales versátiles, con protección y capacidad de combate intermedias.", 100, 2, 6, 6, 1, 7, "Cuerpo a cuerpo")
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitType("SPEARMEN", "Lanceros", "Buenos contra caballería y carros, malos contra infantería pesada y ligeramente protegidos.", 100, 1, 6, 5, 1, 7, "Cuerpo a cuerpo")
     return:$SYSTEM.Status.IsError(sc) sc
@@ -35,6 +48,7 @@ ClassMethod SeedUnitProfiles() As %Status [ Private ]
     for faction = "EGYPTIAN","ASSYRIAN" {
         set sc = ..CopyProfile("LIGHT_INFANTRY", faction) return:$SYSTEM.Status.IsError(sc) sc
         set sc = ..CopyProfile("HEAVY_INFANTRY", faction) return:$SYSTEM.Status.IsError(sc) sc
+        set sc = ..CopyProfile("MERCENARIES", faction) return:$SYSTEM.Status.IsError(sc) sc
         set sc = ..CopyProfile("SPEARMEN", faction) return:$SYSTEM.Status.IsError(sc) sc
         set sc = ..CopyProfile("LIGHT_CAVALRY", faction) return:$SYSTEM.Status.IsError(sc) sc
         set sc = ..CopyProfile("HEAVY_CAVALRY", faction) return:$SYSTEM.Status.IsError(sc) sc

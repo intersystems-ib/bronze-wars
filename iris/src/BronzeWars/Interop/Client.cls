@@ -54,4 +54,14 @@ ClassMethod StartBattle(battleId As %String, simulateFailure As %Boolean = 0) As
     return ..Invoke("Battle Service", "START_BATTLE", {"battleId":(battleId)}, simulateFailure)
 }
 
+ClassMethod MoveUnit(battleId As %String, unitId As %String, x As %Integer, y As %Integer) As %DynamicObject
+{
+    return ..Invoke("Battle Service", "MOVE_UNIT", {"battleId":(battleId),"unitId":(unitId),"x":(x),"y":(y)})
+}
+
+ClassMethod NextTurn(battleId As %String, confirmIncomplete As %Boolean = 0) As %DynamicObject
+{
+    return ..Invoke("Battle Service", "NEXT_TURN", {"battleId":(battleId),"confirmIncomplete":(confirmIncomplete)})
+}
+
 }

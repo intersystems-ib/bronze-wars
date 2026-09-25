@@ -12,7 +12,9 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
     <Route Url="/battles/:battleId" Method="GET" Call="GetBattle" />
     <Route Url="/battles/:battleId/deployment" Method="GET" Call="GetDeployment" />
     <Route Url="/battles/:battleId/units/:unitId/position" Method="PUT" Call="PutUnitPosition" />
+    <Route Url="/battles/:battleId/units/:unitId/move" Method="PUT" Call="MoveUnit" />
     <Route Url="/battles/:battleId/start" Method="POST" Call="StartBattle" />
+    <Route Url="/battles/:battleId/next-turn" Method="POST" Call="NextTurn" />
 </Routes>
 }
 
@@ -76,6 +78,38 @@ ClassMethod PutUnitPosition(battleId As %String, unitId As %String) As %Status
 ClassMethod StartBattle(battleId As %String) As %Status
 {
     do ..WriteResult(##class(BronzeWars.Interop.Client).StartBattle(battleId))
+    return $$$OK
+}
+
+ClassMethod MoveUnit(battleId As %String, unitId As %String) As %Status
+{
+    set parseResult = ..ReadJSON(0, .input)
+    if 'parseResult.ok {
+        do ..WriteResult(parseResult)
+        return $$$OK
+    }
+    set validation = ..ValidatePositionInput(input)
+    if 'validation.ok {
+        do ..WriteResult(validation)
+        return $$$OK
+    }
+    do ..WriteResult(##class(BronzeWars.Interop.Client).MoveUnit(battleId, unitId, input.x, input.y))
+    return $$$OK
+}
+
+ClassMethod NextTurn(battleId As %String) As %Status
+{
+    set parseResult = ..ReadJSON(1, .input)
+    if 'parseResult.ok {
+        do ..WriteResult(parseResult)
+        return $$$OK
+    }
+    if 'input.%IsDefined("confirmIncomplete") do input.%Set("confirmIncomplete", 0)
+    if input.%IsDefined("confirmIncomplete"), (input.%GetTypeOf("confirmIncomplete") '= "boolean") {
+        do ..WriteResult(..BadField("confirmIncomplete", "La confirmacion debe ser un booleano."))
+        return $$$OK
+    }
+    do ..WriteResult(##class(BronzeWars.Interop.Client).NextTurn(battleId, input.confirmIncomplete))
     return $$$OK
 }
 

@@ -12,8 +12,6 @@ services:
       - ./iris/shared:/iris-shared
     environment:
       ISC_DATA_DIRECTORY: /iris-shared/durable
-      BRONZEWARS_LLM_BASE_URL: http://llama:8000/v1
-      BRONZEWARS_LLM_MODEL: llama-3.1-8b-instruct
     command: --check-caps false --ISCAgent false
     depends_on:
       - llama
@@ -80,4 +78,10 @@ services:
         reservations:
           devices:
             - capabilities: ["gpu"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 150s
     restart: unless-stopped

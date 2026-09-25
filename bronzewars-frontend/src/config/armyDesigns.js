@@ -4,6 +4,7 @@ import heavyCavalryEgypt from '../assets/heavy_cavalry_1.jpg';
 import heavyInfantryEgypt from '../assets/heavy_infantry_1.jpg';
 import lightCavalryEgypt from '../assets/light_cavalry_1.jpg';
 import lightInfantryEgypt from '../assets/light_infantry_1.jpg';
+import mercenaries from '../assets/mercenary.jpg';
 import spearmenEgypt from '../assets/pikeman_1.jpg';
 import archersAssyria from '../assets/archer_2.jpg';
 import chariotsAssyria from '../assets/charioter_2.jpg';
@@ -28,6 +29,7 @@ export const ARMY_DESIGNS = [
       HEAVY_INFANTRY: heavyInfantryEgypt,
       LIGHT_CAVALRY: lightCavalryEgypt,
       LIGHT_INFANTRY: lightInfantryEgypt,
+      MERCENARIES: mercenaries,
       SPEARMEN: spearmenEgypt,
     },
   },
@@ -43,6 +45,7 @@ export const ARMY_DESIGNS = [
       HEAVY_INFANTRY: heavyInfantryAssyria,
       LIGHT_CAVALRY: lightCavalryAssyria,
       LIGHT_INFANTRY: lightInfantryAssyria,
+      MERCENARIES: mercenaries,
       SPEARMEN: spearmenAssyria,
     },
   },

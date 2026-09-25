@@ -2,9 +2,11 @@ import { useI18n } from '../i18n/I18nContext';
 import { getArmyDesignForFaction } from '../config/armyDesigns';
 import UnitArtwork from './UnitArtwork';
 
-export default function UnitRoster({ army, selectedUnitId, disabled, onSelect }) {
+export default function UnitRoster({ army, selectedUnitId, disabled, onSelect, onDragStart, onDragEnd }) {
   const { t } = useI18n();
   const armyDesign = getArmyDesignForFaction(army?.faction);
+  const undeployedUnits = army?.units.filter((unit) => !unit.isDeployed) || [];
+  const ready = Boolean(army?.units.every((unit) => unit.isDeployed));
 
   return (
     <section className="roster panel">
@@ -13,37 +15,39 @@ export default function UnitRoster({ army, selectedUnitId, disabled, onSelect })
           <p className="eyebrow">{t(armyDesign.nameKey)}</p>
           <h2>{t('battle.human')}</h2>
         </div>
-        <span className={`readiness ${army?.units.every((unit) => unit.isDeployed) ? 'is-ready' : ''}`}>
-          {army?.units.every((unit) => unit.isDeployed) ? t('battle.ready') : t('battle.notReady')}
+        <span className={`readiness ${ready ? 'is-ready' : ''}`}>
+          {ready ? t('battle.ready') : t('battle.notReady')}
         </span>
       </div>
 
       <div className="roster-list">
-        {army?.units.map((unit) => {
+        {undeployedUnits.map((unit) => {
           const selected = String(unit.id) === String(selectedUnitId);
           return (
-            <button
+            <article
+              aria-label={t('battle.dragUnit', { unit: unit.type.name })}
               className={`roster-unit ${selected ? 'is-selected' : ''}`}
-              disabled={disabled || !unit.active}
+              draggable={!disabled && Boolean(unit.active)}
               key={unit.id}
-              onClick={() => onSelect(unit)}
-              type="button"
+              onDragEnd={onDragEnd}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', String(unit.id));
+                onSelect(unit);
+                onDragStart(unit.id);
+              }}
+              title={t('battle.dragUnit', { unit: unit.type.name })}
             >
               <span className="roster-unit__mark">
                 <UnitArtwork unitCode={unit.type.code} faction={army?.faction} alt="" />
               </span>
               <span className="roster-unit__body">
-                <strong>{unit.name}</strong>
-                <small>
-                  {unit.position
-                    ? t('battle.position', unit.position)
-                    : t('battle.undeployed')}
-                </small>
+                <strong>{unit.type.name}</strong>
               </span>
-              <span className={`deployment-dot ${unit.isDeployed ? 'is-deployed' : ''}`} title={unit.isDeployed ? t('battle.deployed') : t('battle.undeployed')} />
-            </button>
+            </article>
           );
         })}
+        {ready && <p className="roster-empty">{t('battle.allUnitsDeployed')}</p>}
       </div>
     </section>
   );

@@ -7,6 +7,7 @@ Relationship Battle As BronzeWars.Model.Battle [ Cardinality = one, Inverse = Ar
 Property Name As %String(MAXLEN = 100) [ Required ];
 Property Side As %String(VALUELIST = ",HUMAN,AI") [ Required ];
 Property Faction As %String(VALUELIST = ",EGYPTIAN,ASSYRIAN") [ Required ];
+Property CommanderType As %String(VALUELIST = ",DEFENSIVE,AGGRESSIVE,SKIRMISHER,FLANKER,BALANCED");
 Property Active As %Boolean [ InitialExpression = 1, Required ];
 Relationship Units As BronzeWars.Model.BattleUnit [ Cardinality = many, Inverse = Army ];
 

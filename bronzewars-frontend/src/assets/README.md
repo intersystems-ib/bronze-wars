@@ -5,4 +5,7 @@ Egyptian army and design `2` is the Assyrian army. The mapping from domain unit 
 `src/config/armyDesigns.js` so that new visual armies can be added without
 changing the board components.
 
+`mercenary.jpg` is shared by every army because mercenaries are available to
+all factions.
+
 Artwork is displayed in rectangular 3:2 previews and 4:3 battlefield cells.

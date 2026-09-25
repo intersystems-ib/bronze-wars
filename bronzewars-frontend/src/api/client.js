@@ -33,5 +33,13 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(position),
   }),
+  moveUnit: (battleId, unitId, position) => request(`/battles/${battleId}/units/${unitId}/move`, {
+    method: 'PUT',
+    body: JSON.stringify(position),
+  }),
   startBattle: (battleId) => request(`/battles/${battleId}/start`, { method: 'POST' }),
+  nextTurn: (battleId, confirmIncomplete = false) => request(`/battles/${battleId}/next-turn`, {
+    method: 'POST',
+    body: JSON.stringify({ confirmIncomplete }),
+  }),
 };

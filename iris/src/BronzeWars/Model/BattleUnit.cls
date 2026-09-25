@@ -6,6 +6,8 @@ Relationship UnitType As BronzeWars.Model.UnitType [ Cardinality = one, Inverse 
 Relationship UnitProfile As BronzeWars.Model.UnitProfile [ Cardinality = one, Inverse = BattleUnits ];
 Property Name As %String(MAXLEN = 100);
 Property CurrentStrength As %Integer(MINVAL = 0) [ Required ];
+Property Morale As %Integer(MAXVAL = 100, MINVAL = 0) [ InitialExpression = 100, Required ];
+Property MovementSpent As %Integer(MINVAL = 0) [ InitialExpression = 0, Required ];
 Property PositionX As %Integer(MINVAL = 0);
 Property PositionY As %Integer(MINVAL = 0);
 Property IsDeployed As %Boolean [ InitialExpression = 0, Required ];

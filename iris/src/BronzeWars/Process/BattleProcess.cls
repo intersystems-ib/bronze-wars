@@ -1,7 +1,7 @@
 Class BronzeWars.Process.BattleProcess Extends BronzeWars.Process.BaseProcess
 {
 
-Parameter ALLOWEDACTIONS = "CREATE_BATTLE,GET_BATTLE,START_BATTLE";
+Parameter ALLOWEDACTIONS = "CREATE_BATTLE,GET_BATTLE,START_BATTLE,MOVE_UNIT,NEXT_TURN";
 
 Method OnRequest(request As BronzeWars.Message.Request, Output response As BronzeWars.Message.Response) As %Status
 {
@@ -54,6 +54,56 @@ Method OnRequest(request As BronzeWars.Message.Request, Output response As Bronz
         lock -^BronzeWarsBattleLock(payload.battleId)
         return sc
     }
+    if request.Action = "NEXT_TURN" {
+        lock +^BronzeWarsBattleLock(payload.battleId):5
+        if '$test return ..SetError(.response, 409, "BATTLE_BUSY", "La batalla esta siendo modificada por otra peticion.")
+        set sc = ..AdvanceTurnWithCommander(request, .response)
+        lock -^BronzeWarsBattleLock(payload.battleId)
+        return sc
+    }
+    if request.Action = "MOVE_UNIT" {
+        lock +^BronzeWarsBattleLock(payload.battleId):5
+        if '$test return ..SetError(.response, 409, "BATTLE_BUSY", "La batalla esta siendo modificada por otra peticion.")
+        set sc = ..SendToOperation(request, .response)
+        lock -^BronzeWarsBattleLock(payload.battleId)
+        return sc
+    }
+    return ..SendToOperation(request, .response)
+}
+
+Method AdvanceTurnWithCommander(request As BronzeWars.Message.Request, Output response As BronzeWars.Message.Response) As %Status [ Private ]
+{
+    set payload = request.Payload()
+    set contextRequest = ##class(BronzeWars.Message.Request).%New()
+    set contextRequest.Action = "PREPARE_AI_MOVEMENT"
+    set contextRequest.PayloadJSON = {"battleId":(payload.battleId),"confirmIncomplete":(payload.confirmIncomplete)}.%ToJSON()
+    set sc = ..SendRequestSync(..#OPERATION, contextRequest, .contextResponse)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set contextResult = contextResponse.Result()
+    if 'contextResult.ok {
+        set response = contextResponse
+        return $$$OK
+    }
+    set context = contextResult.data, source = "DETERMINISTIC_FALLBACK", reasoning = "Movimiento tactico de respaldo basado en cohesion, alcance y flancos."
+    set sc = ##class(BronzeWars.AI.DeterministicMovementGenerator).Generate(context, .movements)
+    if $SYSTEM.Status.IsError(sc) return ..SetError(.response, 500, "AI_MOVEMENT_FAILED", "No se ha podido generar el movimiento de la IA.")
+
+    set llmRequest = ##class(BronzeWars.Message.Request).%New()
+    set llmRequest.Action = "PLAN_AI_MOVEMENT"
+    set llmRequest.PayloadJSON = {"battleId":(context.battleId),"goal":(##class(BronzeWars.AI.MovementCommander).BuildAgentGoal(context))}.%ToJSON()
+    set llmStatus = ..SendRequestSync("LLM Operation", llmRequest, .llmResponse)
+    if $SYSTEM.Status.IsOK(llmStatus), $isobject(llmResponse) {
+        set llmResult = llmResponse.Result()
+        if llmResult.ok {
+            set validation = ##class(BronzeWars.AI.MovementCommander).ParseChoices(llmResult.data.content, context, .llmMovements, .llmReasoning)
+            if $SYSTEM.Status.IsOK(validation) set movements = llmMovements, source = "AI_HUB_TOOL", reasoning = llmReasoning
+            if $SYSTEM.Status.IsError(validation) $$$LOGWARNING("Invalid LLM movement response: " _ $SYSTEM.Status.GetErrorText(validation) _ " Content: " _ llmResult.data.content)
+        }
+    }
+    do payload.%Set("aiMovements", movements)
+    do payload.%Set("movementSource", source)
+    do payload.%Set("movementReasoning", reasoning)
+    set request.PayloadJSON = payload.%ToJSON()
     return ..SendToOperation(request, .response)
 }
 
@@ -72,8 +122,9 @@ Method StartWithCommander(request As BronzeWars.Message.Request, Output response
     }
     set planningContext = contextResult.data
 
-    set compositionSource = "DETERMINISTIC_FALLBACK", compositionReasoning = "Se ha elegido una composicion equilibrada que consume las 100 medidas de grano."
-    set composition = ##class(BronzeWars.Rules.ArmyBudget).StrategicFallback(planningContext.board.width * 3)
+    set compositionSource = "DETERMINISTIC_FALLBACK", compositionReasoning = "Se ha elegido una composicion de respaldo acorde con el tipo de comandante y que consume las 100 medidas de grano."
+    set targetLineLength = ##class(BronzeWars.AI.ArmyCommander).TargetLineLength(planningContext)
+    set composition = ##class(BronzeWars.AI.Commanders.Strategy).FallbackComposition(planningContext.commanderType, planningContext.board.width * 3, targetLineLength)
     set armyRequest = ##class(BronzeWars.Message.Request).%New()
     set armyRequest.Action = "PLAN_AI_ARMY"
     set armyRequest.PayloadJSON = ##class(BronzeWars.AI.ArmyCommander).BuildRequest(planningContext).%ToJSON()
@@ -83,21 +134,7 @@ Method StartWithCommander(request As BronzeWars.Message.Request, Output response
         if armyResult.ok {
             set armyValidation = ##class(BronzeWars.AI.ArmyCommander).ParseAndValidate(armyResult.data.content, planningContext, .llmComposition, .llmCompositionReasoning)
             if $SYSTEM.Status.IsOK(armyValidation) set composition = llmComposition, compositionSource = "LLM", compositionReasoning = llmCompositionReasoning
-            if $SYSTEM.Status.IsError(armyValidation) {
-                $$$LOGWARNING("Invalid LLM army composition: " _ $SYSTEM.Status.GetErrorText(armyValidation) _ " Content: " _ armyResult.data.content)
-                set repairRequest = ##class(BronzeWars.Message.Request).%New()
-                set repairRequest.Action = "PLAN_AI_ARMY"
-                set repairRequest.PayloadJSON = ##class(BronzeWars.AI.ArmyCommander).BuildCorrectionRequest(planningContext, armyResult.data.content, $SYSTEM.Status.GetErrorText(armyValidation)).%ToJSON()
-                set repairStatus = ..SendRequestSync("LLM Operation", repairRequest, .repairResponse)
-                if $SYSTEM.Status.IsOK(repairStatus), $isobject(repairResponse) {
-                    set repairResult = repairResponse.Result()
-                    if repairResult.ok {
-                        set repairValidation = ##class(BronzeWars.AI.ArmyCommander).ParseAndValidate(repairResult.data.content, planningContext, .llmComposition, .llmCompositionReasoning)
-                        if $SYSTEM.Status.IsOK(repairValidation) set composition = llmComposition, compositionSource = "LLM", compositionReasoning = llmCompositionReasoning
-                        if $SYSTEM.Status.IsError(repairValidation) $$$LOGWARNING("Invalid corrected LLM army composition: " _ $SYSTEM.Status.GetErrorText(repairValidation) _ " Content: " _ repairResult.data.content)
-                    }
-                }
-            }
+            if $SYSTEM.Status.IsError(armyValidation) $$$LOGWARNING("Invalid LLM army composition; using the strategic fallback without a second model call: " _ $SYSTEM.Status.GetErrorText(armyValidation) _ " Content: " _ armyResult.data.content)
         }
     }
 
