@@ -13,6 +13,7 @@ ClassMethod UnitType(unitType As BronzeWars.Model.UnitType, includeStats As %Boo
         } else {
             do ..ApplyStats(value, unitType)
         }
+        do value.%Set("initialProjectiles", unitType.InitialProjectiles)
         if faction = "" {
             set profiles = ##class(%DynamicObject).%New(), unitTypeId = unitType.%Id()
             &sql(DECLARE ProfileCursor CURSOR FOR SELECT %ID FROM BronzeWars_Model.UnitProfile WHERE UnitType = :unitTypeId AND Active = 1 ORDER BY Faction)
@@ -51,7 +52,9 @@ ClassMethod BattleUnit(unit As BronzeWars.Model.BattleUnit, hidePosition As %Boo
     if $isobject(unit.UnitProfile) set speed = unit.UnitProfile.Speed
     set remainingMovement = speed - movementSpent
     if remainingMovement < 0 set remainingMovement = 0
-    set value = {"id":(unit.%Id()),"name":(unit.Name),"type":(..UnitType(unit.UnitType, 1, unit.Army.Faction)),"currentStrength":(unit.CurrentStrength),"morale":(morale),"movementSpent":(movementSpent),"remainingMovement":(remainingMovement),"isDeployed":(unit.IsDeployed),"hasMoved":(unit.HasMoved),"active":(unit.Active)}
+    set unitType = ..UnitType(unit.UnitType, 1, unit.Army.Faction)
+    set projectiles = $select(unit.CurrentProjectiles="":unit.UnitType.InitialProjectiles, 1:unit.CurrentProjectiles)
+    set value = {"id":(unit.%Id()),"name":(unit.Name),"type":(unitType),"currentStrength":(unit.CurrentStrength),"projectiles":(projectiles),"morale":(morale),"movementSpent":(movementSpent),"remainingMovement":(remainingMovement),"isDeployed":(unit.IsDeployed),"hasMoved":(unit.HasMoved),"hasAttacked":(unit.HasAttacked),"active":(unit.Active)}
     if hidePosition || 'unit.IsDeployed {
         do value.%Set("position", "", "null")
     } else {

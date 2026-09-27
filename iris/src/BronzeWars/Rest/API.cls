@@ -13,6 +13,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
     <Route Url="/battles/:battleId/deployment" Method="GET" Call="GetDeployment" />
     <Route Url="/battles/:battleId/units/:unitId/position" Method="PUT" Call="PutUnitPosition" />
     <Route Url="/battles/:battleId/units/:unitId/move" Method="PUT" Call="MoveUnit" />
+    <Route Url="/battles/:battleId/units/:unitId/attack/:targetUnitId" Method="POST" Call="AttackUnit" />
     <Route Url="/battles/:battleId/start" Method="POST" Call="StartBattle" />
     <Route Url="/battles/:battleId/next-turn" Method="POST" Call="NextTurn" />
 </Routes>
@@ -94,6 +95,12 @@ ClassMethod MoveUnit(battleId As %String, unitId As %String) As %Status
         return $$$OK
     }
     do ..WriteResult(##class(BronzeWars.Interop.Client).MoveUnit(battleId, unitId, input.x, input.y))
+    return $$$OK
+}
+
+ClassMethod AttackUnit(battleId As %String, unitId As %String, targetUnitId As %String) As %Status
+{
+    do ..WriteResult(##class(BronzeWars.Interop.Client).AttackUnit(battleId, unitId, targetUnitId))
     return $$$OK
 }
 

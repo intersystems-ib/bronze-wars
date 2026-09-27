@@ -73,6 +73,18 @@ ClassMethod FallbackComposition(type As %String, capacity As %Integer, targetFro
     if type = ..#DEFENSIVE, capacity >= 14 return [{"code":"SPEARMEN","quantity":8},{"code":"HEAVY_INFANTRY","quantity":4},{"code":"MERCENARIES","quantity":2}]
     if type = ..#AGGRESSIVE, capacity >= 13 return [{"code":"SPEARMEN","quantity":5},{"code":"LIGHT_INFANTRY","quantity":6},{"code":"LIGHT_CAVALRY","quantity":2}]
     if type = ..#SKIRMISHER, capacity >= 14 return [{"code":"SPEARMEN","quantity":3},{"code":"ARCHERS","quantity":6},{"code":"LIGHT_INFANTRY","quantity":4},{"code":"LIGHT_CAVALRY","quantity":1}]
+    if type = ..#FLANKER, targetFrontage > 8 {
+        set composition = ##class(BronzeWars.Rules.ArmyBudget).FormationFallback(capacity, targetFrontage)
+        set validation = ..ValidateComposition(type, composition)
+        if $SYSTEM.Status.IsOK(validation) return composition
+
+        // Some exact-grain solutions contain only two unit types. Asking for one
+        // additional line unit produces a varied, mobile army while still covering
+        // the requested frontage.
+        set composition = ##class(BronzeWars.Rules.ArmyBudget).FormationFallback(capacity, targetFrontage + 1)
+        set validation = ..ValidateComposition(type, composition)
+        if $SYSTEM.Status.IsOK(validation) return composition
+    }
     if type = ..#FLANKER, capacity >= 11 return [{"code":"SPEARMEN","quantity":8},{"code":"ARCHERS","quantity":1},{"code":"LIGHT_CAVALRY","quantity":1},{"code":"CHARIOTS","quantity":1}]
     if type = ..#BALANCED, capacity >= 10 return ##class(BronzeWars.Rules.ArmyBudget).DefaultComposition()
     return ##class(BronzeWars.Rules.ArmyBudget).FormationFallback(capacity, targetFrontage)

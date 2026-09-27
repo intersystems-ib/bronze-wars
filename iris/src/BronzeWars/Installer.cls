@@ -33,8 +33,12 @@ ClassMethod ConfigureProduction() As %Status
     return:$SYSTEM.Status.IsError(sc) sc
 
     if ##class(Ens.Director).IsProductionRunning(.runningProduction) {
-        if runningProduction = production return ##class(Ens.Director).UpdateProduction()
-        return $$$ERROR($$$GeneralError, "Another production is already running: " _ runningProduction)
+        if runningProduction '= production return $$$ERROR($$$GeneralError, "Another production is already running: " _ runningProduction)
+
+        // Business hosts are long-lived processes. A full restart guarantees that
+        // they execute the routines just compiled by the installer.
+        set sc = ##class(Ens.Director).StopProduction()
+        return:$SYSTEM.Status.IsError(sc) sc
     }
     return ##class(Ens.Director).StartProduction(production)
 }

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 import UnitArtwork from './UnitArtwork';
 
@@ -8,7 +8,10 @@ const STAT_SYMBOLS = {
   movement: '\u{130BB}',
 };
 
-function Combatant({ unit, army, sideLabel }) {
+const AUTOMATIC_CASUALTY_DELAY_MS = 1000;
+const RESULT_DISPLAY_MS = 3000;
+
+function Combatant({ unit, army, sideLabel, casualties }) {
   const { t } = useI18n();
   const morale = Number.isFinite(Number(unit.morale)) ? Number(unit.morale) : 100;
 
@@ -18,6 +21,9 @@ function Combatant({ unit, army, sideLabel }) {
       <h3>{unit.type.name}</h3>
       <div className="encounter-combatant__art">
         <UnitArtwork unitCode={unit.type.code} faction={army.faction} alt={unit.type.name} loading="eager" />
+        {Number(casualties) > 0 && (
+          <span className="encounter-combatant__damage" aria-live="assertive">-{casualties}</span>
+        )}
       </div>
       <dl className="encounter-combatant__primary-stats">
         <div className="is-attack" title={t('battle.attack')}>
@@ -38,13 +44,22 @@ function Combatant({ unit, army, sideLabel }) {
         <div><dt>{t('battle.morale')}</dt><dd>{morale}</dd></div>
         <div><dt>{t('battle.range')}</dt><dd>{unit.type.attackRange}</dd></div>
         <div><dt>{t('battle.damage')}</dt><dd>{unit.type.damage}</dd></div>
+        {Number(unit.type.initialProjectiles) > 0 && (
+          <div><dt>{t('battle.projectiles')}</dt><dd>{unit.projectiles} / {unit.type.initialProjectiles}</dd></div>
+        )}
       </dl>
     </article>
   );
 }
 
-export default function BattleEncounterModal({ attacker, attackerArmy, defender, defenderArmy, onClose }) {
+export default function BattleEncounterModal({ attacker, attackerArmy, defender, defenderArmy, busy, attackType, result, automatic = false, onResolve, onClose }) {
   const { t } = useI18n();
+  const onCloseRef = useRef(onClose);
+  const [showCasualties, setShowCasualties] = useState(!automatic);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     function closeOnEscape(event) {
@@ -53,6 +68,26 @@ export default function BattleEncounterModal({ attacker, attackerArmy, defender,
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!result) return undefined;
+    const timeoutId = window.setTimeout(
+      () => onCloseRef.current(),
+      RESULT_DISPLAY_MS + (automatic ? AUTOMATIC_CASUALTY_DELAY_MS : 0),
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [automatic, result]);
+
+  useEffect(() => {
+    if (!result || !automatic) {
+      setShowCasualties(Boolean(result));
+      return undefined;
+    }
+
+    setShowCasualties(false);
+    const timeoutId = window.setTimeout(() => setShowCasualties(true), AUTOMATIC_CASUALTY_DELAY_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [automatic, result]);
 
   if (!attacker || !attackerArmy || !defender || !defenderArmy) return null;
 
@@ -78,16 +113,32 @@ export default function BattleEncounterModal({ attacker, attackerArmy, defender,
           </div>
           <button aria-label={t('app.close')} className="encounter-modal__close" onClick={onClose} type="button">×</button>
         </header>
-        <p className="encounter-modal__description" id="encounter-description">{t('battle.encounterDescription')}</p>
+        <p className="encounter-modal__description" id="encounter-description">
+          {attackType === 'RANGED' ? t('battle.rangedEncounterDescription') : t('battle.encounterDescription')}
+        </p>
         <div className="encounter-modal__combatants">
-          <Combatant unit={attacker} army={attackerArmy} sideLabel={t('battle.attacker')} />
+          <Combatant
+            unit={attacker}
+            army={attackerArmy}
+            sideLabel={t('battle.attacker')}
+            casualties={result && showCasualties ? result.attackerCasualties : undefined}
+          />
           <div className="encounter-modal__versus" aria-hidden="true">{t('battle.versus')}</div>
-          <Combatant unit={defender} army={defenderArmy} sideLabel={t('battle.defender')} />
+          <Combatant
+            unit={defender}
+            army={defenderArmy}
+            sideLabel={t('battle.defender')}
+            casualties={result && showCasualties ? result.defenderCasualties : undefined}
+          />
         </div>
-        <footer className="encounter-modal__footer">
-          <span>{t('battle.combatPending')}</span>
-          <button autoFocus className="button button--secondary" onClick={onClose} type="button">{t('app.close')}</button>
-        </footer>
+        {!automatic && (
+          <footer aria-hidden={result ? 'true' : undefined} className={`encounter-modal__footer${result ? ' is-result' : ''}`}>
+            <span>{t('battle.combatPending')}</span>
+            <button autoFocus={!result} className="button button--primary" disabled={busy || Boolean(result)} onClick={onResolve} type="button">
+              {busy ? t('battle.resolvingCombat') : t('battle.resolveCombat')}
+            </button>
+          </footer>
+        )}
       </section>
     </div>
   );

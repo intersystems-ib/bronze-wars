@@ -4,7 +4,6 @@ Class BronzeWars.AI.DeterministicMovementGenerator Extends %RegisteredObject
 ClassMethod Generate(context As %DynamicObject, Output movements As %DynamicArray) As %Status
 {
     set movements = ##class(%DynamicArray).%New()
-    if context.commanderType = ##class(BronzeWars.AI.Commanders.Strategy).#DEFENSIVE, ((context.round # 2) = 0) return ..HoldPosition(context, .movements)
     kill occupied, planned
     for index = 0:1:(context.humanUnits.%Size() - 1) {
         set unit = context.humanUnits.%Get(index), occupied(unit.x _ "," _ unit.y) = unit.unitId
@@ -23,11 +22,7 @@ ClassMethod Generate(context As %DynamicObject, Output movements As %DynamicArra
             set x = unit.x, y = unit.y
             kill occupied(x _ "," _ y)
             if pass = 1 {
-                if context.commanderType = ##class(BronzeWars.AI.Commanders.Strategy).#FLANKER, ((code="LIGHT_CAVALRY") ! (code="CHARIOTS")) {
-                    do ..AdvanceHeavyCavalry(unit, context, .occupied, .x, .y)
-                } else {
-                    do ..AdvanceProjectileUnit(unit, context, .occupied, .x, .y)
-                }
+                do ..AdvanceProjectileUnit(unit, context, .occupied, .x, .y)
             }
             if pass = 2 do ..AdvanceHeavyCavalry(unit, context, .occupied, .x, .y)
             set occupied(x _ "," _ y) = unit.unitId, planned(unit.unitId _ "") = {"unitId":(unit.unitId),"x":(x),"y":(y)}
@@ -85,16 +80,6 @@ ClassMethod AdvanceMainLine(context As %DynamicObject, ByRef occupied, ByRef pla
         set planned(unit.unitId _ "") = {"unitId":(unit.unitId),"x":(x),"y":(y)}
         do movements.%Push(planned(unit.unitId _ ""))
     }
-}
-
-ClassMethod HoldPosition(context As %DynamicObject, Output movements As %DynamicArray) As %Status [ Private ]
-{
-    set movements = ##class(%DynamicArray).%New()
-    for index = 0:1:(context.aiUnits.%Size() - 1) {
-        set unit = context.aiUnits.%Get(index)
-        do movements.%Push({"unitId":(unit.unitId),"x":(unit.x),"y":(unit.y)})
-    }
-    return $$$OK
 }
 
 ClassMethod AdvanceHeavyCavalry(unit As %DynamicObject, context As %DynamicObject, ByRef occupied, Output x As %Integer, Output y As %Integer) [ Private ]

@@ -15,14 +15,23 @@ Method Test01SeedContainsExpectedUnits()
     set mercenaries = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("MERCENARIES")
     do $$$AssertEquals(mercenaries.GrainCost, 8, "Mercenaries cost the infantry average plus one")
     do ..AssertUnit("SPEARMEN", "Lanceros", 100, 1, 6, 5, 1, 7, "Cuerpo a cuerpo")
-    do ..AssertUnit("LIGHT_CAVALRY", "Caballería ligera", 60, 3, 5, 3, 2, 7, "Jabalinas")
-    do ..AssertUnit("HEAVY_CAVALRY", "Caballería pesada", 50, 2, 9, 8, 1, 10, "Cuerpo a cuerpo")
-    do ..AssertUnit("CHARIOTS", "Carros", 20, 3, 5, 3, 5, 5, "Flechas")
-    do ..AssertUnit("ARCHERS", "Arqueros", 80, 2, 4, 2, 6, 4, "Flechas")
+    do ..AssertUnit("LIGHT_CAVALRY", "Caballería ligera", 30, 3, 5, 3, 2, 14, "Jabalinas")
+    do ..AssertUnit("HEAVY_CAVALRY", "Caballería pesada", 25, 2, 9, 8, 1, 10, "Cuerpo a cuerpo")
+    do ..AssertUnit("CHARIOTS", "Carros", 20, 3, 5, 3, 5, 10, "Flechas")
+    do ..AssertUnit("ARCHERS", "Arqueros", 80, 2, 4, 2, 6, 8, "Flechas")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitType).CodeIndexOpen("ARCHERS").InitialProjectiles, 20, "Archers start with twenty projectiles")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitType).CodeIndexOpen("CHARIOTS").InitialProjectiles, 10, "Chariots start with ten projectiles")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY").InitialProjectiles, 5, "Light cavalry starts with five projectiles")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_INFANTRY").InitialProjectiles, 10, "Light infantry starts with ten projectiles")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_INFANTRY").InitialProjectiles, 0, "Melee units start without projectiles")
     do ..AssertProfile("CHARIOTS", "EGYPTIAN", 3, 5, 3)
     do ..AssertProfile("CHARIOTS", "ASSYRIAN", 3, 8, 7)
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("CHARIOTS").%Id(), "EGYPTIAN").Damage, 10, "Egyptian chariot projectile damage is doubled")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("CHARIOTS").%Id(), "ASSYRIAN").Damage, 18, "Assyrian chariot projectile damage is doubled")
     do ..AssertProfile("MERCENARIES", "EGYPTIAN", 2, 6, 6)
     do ..AssertProfile("MERCENARIES", "ASSYRIAN", 2, 6, 6)
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY").%Id(), "EGYPTIAN").InitialStrength, 30, "Egyptian light cavalry uses the reduced strength")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_CAVALRY").%Id(), "ASSYRIAN").InitialStrength, 25, "Assyrian heavy cavalry uses the reduced strength")
 }
 
 Method Test02SeedIsIdempotent()
@@ -72,10 +81,12 @@ Method Test06BattleUnitGetsInitialStrength()
 {
     set unitType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY")
     set unit = ##class(BronzeWars.Model.BattleUnit).%New(unitType)
-    do $$$AssertEquals(unit.CurrentStrength, 60, "A new battle unit copies its type's initial strength")
+    do $$$AssertEquals(unit.CurrentStrength, 30, "A new battle unit copies its type's initial strength")
+    do $$$AssertEquals(unit.CurrentProjectiles, 5, "A new battle unit copies its type's initial projectiles")
     do $$$AssertEquals(unit.Morale, 100, "A new battle unit starts with full morale")
     do $$$AssertEquals(unit.MovementSpent, 0, "A new battle unit has spent no movement")
     do $$$AssertEquals(unit.HasMoved, 0, "A new battle unit has not moved")
+    do $$$AssertEquals(unit.HasAttacked, 0, "A new battle unit has not attacked")
     do $$$AssertEquals(unit.Active, 1, "A new battle unit is active")
 }
 
@@ -169,24 +180,6 @@ Method Test11DeterministicAIMovementDoctrine()
     set answer = {"movements":(movements),"reasoning":"Test tactics"}
     set sc = ##class(BronzeWars.AI.MovementCommander).ParseAndValidate(answer.%ToJSON(), context, .validated, .reasoning)
     do $$$AssertStatusOK(sc, "The deterministic plan satisfies movement and cohesion validation")
-    set sc = ##class(BronzeWars.AI.MovementRecommendationGenerator).Generate(context, .recommendations)
-    do $$$AssertStatusOK(sc, "The AI Hub tool can calculate offensive, neutral, and defensive recommendations")
-    do $$$AssertEquals(recommendations.%Size(), context.aiUnits.%Size(), "Every AI unit receives three recommendations")
-    set choices = ##class(%DynamicArray).%New()
-    for index = 0:1:(recommendations.%Size() - 1) {
-        set recommendation = recommendations.%Get(index)
-        do $$$AssertTrue(recommendation.%IsDefined("O") && recommendation.%IsDefined("N") && recommendation.%IsDefined("D"), "A unit recommendation exposes O, N, and D")
-        set choice = ##class(%DynamicArray).%New()
-        do choice.%Push(+(recommendation.unitId)), choice.%Push("O"), choices.%Push(choice)
-    }
-    set choiceAnswer = {"choices":(choices)}
-    set sc = ##class(BronzeWars.AI.MovementCommander).ParseChoices(choiceAnswer.%ToJSON(), context, .chosenMovements, .choiceReasoning)
-    do $$$AssertStatusOK(sc, "Compact AI Hub choices resolve to a valid complete movement plan")
-    do $$$AssertEquals(chosenMovements.%Size(), context.aiUnits.%Size(), "Compact choices retain every AI unit")
-    set movementToolSet = ##class(BronzeWars.AI.ToolSets.Movement).%New(), toolManifest = movementToolSet.%Discover().%ToJSON()
-    do $$$AssertTrue($find(toolManifest, "BronzeWars.AI.ToolSets.Movement") > 0, "AI Hub identifies the packaged BronzeWars movement toolset as provider")
-    do $$$AssertTrue($find(toolManifest, "RecommendMovementOptions") > 0, "The toolset publishes the BronzeWars movement recommendation tool")
-    do $$$AssertTrue($find(toolManifest, "SubmitMovementChoices") > 0, "The toolset publishes the compact movement submission tool")
     set nimProvider = ##class(BronzeWars.AI.Agent.Movement).CreateProvider()
     do $$$AssertEquals(nimProvider.Name, "nim", "The movement agent uses the native AI Hub NIM provider")
     do $$$AssertEquals(##class(BronzeWars.AI.Agent.Movement).#BaseURL, "http://llama:8000/v1", "The NIM provider targets the local llama service")
@@ -194,15 +187,9 @@ Method Test11DeterministicAIMovementDoctrine()
     do $$$AssertEquals(##class(BronzeWars.AI.Agent.Movement).#MODEL, "llama-3.1-8b-instruct", "The agent uses the model alias exposed by llama.cpp")
     do $$$AssertEquals(##class(BronzeWars.AI.Agent.Movement).#MaxTokens, 400, "The agent limits LLM responses to 400 tokens")
     do $$$AssertTrue(+##class(BronzeWars.AI.Agent.Movement).#TopP = 0.9, "The agent uses the configured nucleus sampling value")
-    set configuredAgent = ##class(BronzeWars.AI.Agent.Movement).%New(nimProvider)
-    set configuredAgent.Model = ##class(BronzeWars.AI.Agent.Movement).#MODEL
-    set sc = configuredAgent.%Init()
-    do $$$AssertStatusOK(sc, "The AI Hub agent initializes from the NIM provider")
-    set sc = configuredAgent.UseToolSet("BronzeWars.AI.ToolSets.Movement")
-    do $$$AssertStatusOK(sc, "The movement toolset is registered explicitly with UseToolSet")
     set auditCallId = "MODEL_TEST_" _ $job _ "_" _ $piece($horolog, ",", 2)
-    set auditCall = {"id":(auditCallId),"name":"RecommendMovementOptions","arguments":{"battleId":"MODEL_TEST"}}
-    set auditResult = {"tool_name":"RecommendMovementOptions","result_json":"{}","display_text":""}
+    set auditCall = {"id":(auditCallId),"name":"GetBattleSituation","arguments":{"battleId":"MODEL_TEST"}}
+    set auditResult = {"tool_name":"GetBattleSituation","result_json":"{}","display_text":""}
     set auditPolicy = ##class(BronzeWars.AI.Policies.ToolAudit).%New()
     set sc = auditPolicy.%LogExecution(auditCall, {"domain":"movement"}, auditResult, 12, $$$OK)
     do $$$AssertStatusOK(sc, "The AI audit policy persists a successful tool execution")
@@ -213,23 +200,11 @@ Method Test11DeterministicAIMovementDoctrine()
     do $$$AssertTrue(auditFound, "The audited tool call can be found by its call identifier")
     if auditFound set auditId = auditResultSet.%Get("ID")
     set auditLog = ##class(BronzeWars.AI.Audit.ToolExecution).%OpenId(auditId)
-    do $$$AssertEquals(auditLog.ToolName, "RecommendMovementOptions", "The audit stores the executed tool name")
+    do $$$AssertEquals(auditLog.ToolName, "GetBattleSituation", "The audit stores the executed tool name")
     do $$$AssertTrue(auditLog.Success, "The audit stores the successful status")
     do $$$AssertEquals(auditLog.DurationMs, 12, "The audit stores tool duration")
     set sc = ##class(BronzeWars.AI.Audit.ToolExecution).%DeleteId(auditId)
     do $$$AssertStatusOK(sc, "The test audit record is removed")
-    do ##class(BronzeWars.AI.MovementSubmission).Clear("MODEL_TEST")
-    set compactChoices = ""
-    for index = 0:1:(choices.%Size() - 1) {
-        set choice = choices.%Get(index)
-        set compactChoices = compactChoices _ $select(compactChoices'="":",", 1:"") _ choice.%Get(0) _ ":" _ choice.%Get(1)
-    }
-    set submission = ##class(BronzeWars.AI.Tools.Movement).SubmitMovementChoices("MODEL_TEST", compactChoices)
-    do $$$AssertTrue(submission.accepted, "The tool accepts choices in the compact scalar format published by the toolset")
-    set sc = ##class(BronzeWars.AI.MovementSubmission).Get("MODEL_TEST", .submittedChoices)
-    do $$$AssertStatusOK(sc, "The AI Hub agent can recover submitted movement choices")
-    do $$$AssertEquals(submittedChoices.%Size(), choices.%Size(), "The submission retains every compact choice")
-    do ##class(BronzeWars.AI.MovementSubmission).Clear("MODEL_TEST")
     kill destination
     for index = 0:1:(movements.%Size() - 1) {
         set movement = movements.%Get(index), destination(movement.unitId) = movement.x _ "," _ movement.y
@@ -238,6 +213,19 @@ Method Test11DeterministicAIMovementDoctrine()
     do $$$AssertEquals(destination(200), "0,2", "The left edge of the infantry line advances")
     do $$$AssertEquals(destination(210), "10,2", "The right edge advances with the line")
     do $$$AssertEquals(destination(301), "9,0", "Heavy cavalry moves toward the nearest human flank")
+
+    set context.commanderType = "DEFENSIVE", context.round = 2
+    set sc = ##class(BronzeWars.AI.DeterministicMovementGenerator).Generate(context, .defensiveMovements)
+    do $$$AssertStatusOK(sc, "A defensive commander can plan an even-numbered round")
+    set movedCount = 0
+    for index = 0:1:(defensiveMovements.%Size() - 1) {
+        set movement = defensiveMovements.%Get(index)
+        for unitIndex = 0:1:(context.aiUnits.%Size() - 1) {
+            set originalUnit = context.aiUnits.%Get(unitIndex)
+            if originalUnit.unitId = movement.unitId, ((originalUnit.x '= movement.x) || (originalUnit.y '= movement.y)) set movedCount = movedCount + 1
+        }
+    }
+    do $$$AssertTrue(movedCount > 0, "A defensive commander advances instead of holding every even-numbered round")
 }
 
 Method Test12CommanderArchetypes()
@@ -291,6 +279,130 @@ Method Test13FlankingDeploymentUsesMobileExtremes()
     set answer = {"placements":(placements),"reasoning":"Mobile units on both flanks"}
     set sc = ##class(BronzeWars.AI.DeploymentCommander).ParseAndValidate(answer.%ToJSON(), context, .validated, .reasoning)
     do $$$AssertStatusOK(sc, "The flanking fallback extends the enemy frontage with mobile units on both extremes")
+
+    set wideTarget = ##class(BronzeWars.AI.Commanders.Strategy).MainLineTarget("FLANKER", 16, 16)
+    set wideComposition = ##class(BronzeWars.AI.Commanders.Strategy).FallbackComposition("FLANKER", 48, wideTarget)
+    set sc = ##class(BronzeWars.Rules.ArmyBudget).ValidateComposition(wideComposition, 48, .wideGrain, .wideUnits)
+    do $$$AssertStatusOK(sc, "The wide flanking fallback is a valid 100-grain army")
+    do $$$AssertEquals(wideGrain, 100, "The wide flanking fallback spends all grain")
+    set sc = ##class(BronzeWars.AI.Commanders.Strategy).ValidateComposition("FLANKER", wideComposition)
+    do $$$AssertStatusOK(sc, "The wide flanking fallback retains mobile flank units and unit variety")
+    set wideLineUnits = 0
+    for compositionIndex = 0:1:(wideComposition.%Size() - 1) {
+        set selection = wideComposition.%Get(compositionIndex)
+        if ##class(BronzeWars.AI.DeploymentCommander).IsMainLineCode(selection.code) set wideLineUnits = wideLineUnits + selection.quantity
+    }
+    do $$$AssertTrue(wideLineUnits >= wideTarget, "The wide flanking fallback can form its required continuous line")
+}
+
+Method Test14MeleeCombatFormula()
+{
+    set context = {
+        "attacker":{"strength":100,"morale":80,"attack":8,"defense":4,"damage":10},
+        "defender":{"strength":100,"morale":100,"attack":6,"defense":8,"damage":6}
+    }
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(context)
+    do $$$AssertEquals(result.defenderCasualties, 4, "Attacker damage is reduced by defense and its lower morale")
+    do $$$AssertEquals(result.attackerCasualties, 4, "Defender retaliation uses its capped morale factor")
+    do $$$AssertEquals(result.attackerMoraleFactor, .8, "Attacker morale factor is the morale ratio")
+    do $$$AssertEquals(result.defenderMoraleFactor, 1, "A favorable morale ratio is capped at one")
+
+    set context.attacker.strength = 2, context.defender.strength = 3
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(context)
+    do $$$AssertEquals(result.attackerCasualties, 2, "Attacker casualties cannot exceed its remaining strength")
+    do $$$AssertEquals(result.defenderCasualties, 3, "Defender casualties cannot exceed its remaining strength")
+
+    set context.attacker.strength = 100, context.defender.strength = 100
+    set context.attacker.morale = 0, context.defender.morale = 100
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(context)
+    do $$$AssertEquals(result.defenderCasualties, 0, "A unit with zero morale inflicts no casualties")
+    do $$$AssertEquals(result.attackerMoraleFactor, 0, "Zero morale produces a zero morale factor")
+
+    set rangedContext = {
+        "type":"RANGED",
+        "distance":4,
+        "attacker":{"strength":80,"morale":100,"attack":4,"defense":2,"damage":8,"range":7,"projectiles":8},
+        "defender":{"strength":100,"morale":100,"attack":7,"defense":10,"damage":8,"range":1,"projectiles":0}
+    }
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(rangedContext)
+    do $$$AssertEquals(result.distanceFactor, .75, "Ranged damage decreases linearly with distance")
+    do $$$AssertEquals(result.defenseFactor, .5, "Ranged defense factor uses half the defense score")
+    do $$$AssertEquals(result.defenderCasualties, 3, "Ranged casualties use damage, distance, and defense")
+    do $$$AssertEquals(result.attackerCasualties, 0, "A ranged defender does not retaliate")
+}
+
+Method Test14AMoraleLossIsProportionalToInitialStrength()
+{
+    set infantryType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_INFANTRY")
+    set infantry = ##class(BronzeWars.Model.BattleUnit).%New(infantryType)
+    do $$$AssertEquals(##class(BronzeWars.Rules.Morale).LossForCasualties(infantry, 1), 1, "One casualty costs one morale point in a 100-strength unit")
+
+    set chariotType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("CHARIOTS")
+    set chariotProfile = ##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(chariotType.%Id(), "EGYPTIAN")
+    set chariot = ##class(BronzeWars.Model.BattleUnit).%New(chariotType, chariotProfile)
+    do $$$AssertEquals(##class(BronzeWars.Rules.Morale).LossForCasualties(chariot, 1), 5, "One casualty costs five morale points in a 20-strength unit")
+    do $$$AssertEquals(##class(BronzeWars.Rules.Morale).AfterCasualties(chariot, 100, 3), 85, "Three chariot casualties reduce morale proportionally")
+
+    set cavalryType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY")
+    set cavalry = ##class(BronzeWars.Model.BattleUnit).%New(cavalryType)
+    do $$$AssertEquals(##class(BronzeWars.Rules.Morale).LossForCasualties(cavalry, 3), 10, "Three casualties cost ten morale points in a 30-strength unit")
+}
+
+Method Test15BattleSituationTool()
+{
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(80), "very high", "Morale 80 is very high")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(60), "high", "Morale 60 is high")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(40), "normal", "Morale 40 is normal")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(20), "low", "Morale 20 is low")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(19), "very low", "Morale below 20 is very low")
+
+    set battle = ##class(BronzeWars.Model.Battle).%New()
+    set battle.Name = "Battle situation tool test"
+    set sc = battle.%Save()
+    do $$$AssertStatusOK(sc, "The battle situation fixture can be saved")
+    set battleId = battle.%Id()
+
+    set army = ##class(BronzeWars.Model.Army).%New()
+    set army.Battle = battle
+    set army.Name = "AI situation test army"
+    set army.Side = "AI"
+    set army.Faction = "EGYPTIAN"
+    set sc = army.%Save()
+    do $$$AssertStatusOK(sc, "The AI army situation fixture can be saved")
+    set armyId = army.%Id()
+
+    set unitType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("SPEARMEN")
+    set firstUnit = ##class(BronzeWars.Model.BattleUnit).%New(unitType)
+    set firstUnit.Battle = battle, firstUnit.Army = army, firstUnit.Name = "Situation unit one"
+    set firstUnit.CurrentStrength = 80, firstUnit.Morale = 80
+    set sc = firstUnit.%Save()
+    do $$$AssertStatusOK(sc, "The first situation unit can be saved")
+    set firstUnitId = firstUnit.%Id()
+
+    set secondUnit = ##class(BronzeWars.Model.BattleUnit).%New(unitType)
+    set secondUnit.Battle = battle, secondUnit.Army = army, secondUnit.Name = "Situation unit two"
+    set secondUnit.CurrentStrength = 60, secondUnit.Morale = 60
+    set sc = secondUnit.%Save()
+    do $$$AssertStatusOK(sc, "The second situation unit can be saved")
+    set secondUnitId = secondUnit.%Id()
+
+    set situation = ##class(BronzeWars.AI.Tools.BattleSituation).GetBattleSituation(battleId)
+    do $$$AssertEquals(situation.morale, "high", "The tool classifies the average active morale")
+    do $$$AssertEquals(situation.casualtiesPercentage, 30, "The tool reports casualties against total initial strength")
+
+    set situationToolSet = ##class(BronzeWars.AI.ToolSets.BattleSituation).%New()
+    set toolManifest = situationToolSet.%Discover().%ToJSON()
+    do $$$AssertTrue($find(toolManifest, "BronzeWars.AI.ToolSets.BattleSituation") > 0, "AI Hub identifies the battle situation toolset as provider")
+    do $$$AssertTrue($find(toolManifest, "GetBattleSituation") > 0, "The toolset publishes the battle situation tool")
+
+    set sc = ##class(BronzeWars.Model.BattleUnit).%DeleteId(firstUnitId)
+    do $$$AssertStatusOK(sc, "The first situation unit is removed")
+    set sc = ##class(BronzeWars.Model.BattleUnit).%DeleteId(secondUnitId)
+    do $$$AssertStatusOK(sc, "The second situation unit is removed")
+    set sc = ##class(BronzeWars.Model.Army).%DeleteId(armyId)
+    do $$$AssertStatusOK(sc, "The situation army is removed")
+    set sc = ##class(BronzeWars.Model.Battle).%DeleteId(battleId)
+    do $$$AssertStatusOK(sc, "The situation battle is removed")
 }
 
 Method AssertUnit(code As %String, name As %String, strength As %Integer, speed As %Integer, attack As %Integer, defense As %Integer, attackRange As %Integer, damage As %Integer, attackDescription As %String)
@@ -323,6 +435,7 @@ Method NewValidUnitType(code As %String) As BronzeWars.Model.UnitType
     set unitType.AttackRange = 1
     set unitType.Damage = 1
     set unitType.AttackDescription = "Test"
+    set unitType.InitialProjectiles = 0
     set unitType.GrainCost = 1
     return unitType
 }

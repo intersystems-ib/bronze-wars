@@ -11,15 +11,18 @@ export default function BattleView({
   deployment,
   selectedUnitId,
   animatingUnitId,
+  automaticEncounter,
   busy,
   onSelectUnit,
   onPlaceUnit,
   onMoveUnit,
+  onAttackUnit,
   onStart,
   onNextTurn,
   turnConfirmation,
   onConfirmNextTurn,
   onCancelNextTurn,
+  onAutomaticEncounterClose,
   onExit,
 }) {
   const { t } = useI18n();
@@ -34,12 +37,28 @@ export default function BattleView({
   const selectedUnit = selectedArmy?.units.find((unit) => String(unit.id) === String(selectedUnitId));
   const [draggedUnitId, setDraggedUnitId] = useState(null);
   const [encounterTargetId, setEncounterTargetId] = useState(null);
+  const [encounterResult, setEncounterResult] = useState(null);
   const encounterArmy = battle.armies.find((army) => army.units.some((unit) => String(unit.id) === String(encounterTargetId)));
   const encounterTarget = encounterArmy?.units.find((unit) => String(unit.id) === String(encounterTargetId));
+  const automaticAttackerArmy = battle.armies.find((army) => army.units.some((unit) => String(unit.id) === String(automaticEncounter?.attackerUnitId)));
+  const automaticAttacker = automaticAttackerArmy?.units.find((unit) => String(unit.id) === String(automaticEncounter?.attackerUnitId));
+  const automaticDefenderArmy = battle.armies.find((army) => army.units.some((unit) => String(unit.id) === String(automaticEncounter?.defenderUnitId)));
+  const automaticDefender = automaticDefenderArmy?.units.find((unit) => String(unit.id) === String(automaticEncounter?.defenderUnitId));
 
   function selectUnit(unit) {
     setEncounterTargetId(null);
+    setEncounterResult(null);
     onSelectUnit(unit);
+  }
+
+  function openEncounter(unit) {
+    setEncounterResult(null);
+    setEncounterTargetId(unit.id);
+  }
+
+  async function resolveEncounter() {
+    const result = await onAttackUnit(selectedUnit?.id, encounterTarget?.id);
+    if (result) setEncounterResult(result);
   }
 
   function placeUnit(unitId, position) {
@@ -145,18 +164,41 @@ export default function BattleView({
             onUnitDrop={placeUnit}
             onUnitMove={onMoveUnit}
             onUnitSelect={selectUnit}
-            onAttackTarget={(unit) => setEncounterTargetId(unit.id)}
+            onAttackTarget={openEncounter}
           />
         </div>
       </div>
 
-      {encounterTarget && selectedUnit && selectedArmy && encounterArmy && (
+      {!automaticEncounter && encounterTarget && selectedUnit && selectedArmy && encounterArmy && (
         <BattleEncounterModal
           attacker={selectedUnit}
           attackerArmy={selectedArmy}
           defender={encounterTarget}
           defenderArmy={encounterArmy}
-          onClose={() => setEncounterTargetId(null)}
+          busy={busy}
+          attackType={encounterResult?.type || (
+            selectedUnit.position && encounterTarget.position
+              && Math.abs(selectedUnit.position.x - encounterTarget.position.x) + Math.abs(selectedUnit.position.y - encounterTarget.position.y) === 1
+              ? 'MELEE'
+              : 'RANGED'
+          )}
+          result={encounterResult}
+          onResolve={resolveEncounter}
+          onClose={() => { setEncounterTargetId(null); setEncounterResult(null); }}
+        />
+      )}
+      {automaticEncounter && automaticAttacker && automaticAttackerArmy && automaticDefender && automaticDefenderArmy && (
+        <BattleEncounterModal
+          attacker={automaticAttacker}
+          attackerArmy={automaticAttackerArmy}
+          defender={automaticDefender}
+          defenderArmy={automaticDefenderArmy}
+          busy={false}
+          attackType={automaticEncounter.type}
+          result={automaticEncounter}
+          automatic
+          onResolve={() => {}}
+          onClose={onAutomaticEncounterClose}
         />
       )}
     </main>

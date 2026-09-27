@@ -23,6 +23,10 @@ Method Handle(pRequest As BronzeWars.Message.Request, Output pResponse As Bronze
             set result = ..StartBattle(payload.battleId, pRequest.SimulateFailure, payload.placements, payload.deploymentSource, payload.deploymentReasoning)
         } elseif pRequest.Action = "MOVE_UNIT" {
             set result = ..MoveUnit(payload.battleId, payload.unitId, payload.x, payload.y)
+        } elseif pRequest.Action = "PREPARE_COMBAT" {
+            set result = ..PrepareCombat(payload.battleId, payload.unitId, payload.targetUnitId)
+        } elseif pRequest.Action = "APPLY_COMBAT" {
+            set result = ..ApplyCombat(payload.battleId, payload.unitId, payload.targetUnitId, payload.resolution)
         } elseif pRequest.Action = "NEXT_TURN" {
             set result = ..NextTurn(payload.battleId, payload.confirmIncomplete, payload.aiMovements, payload.movementSource, payload.movementReasoning)
         } elseif pRequest.Action = "PREPARE_AI_MOVEMENT" {
@@ -145,6 +149,174 @@ Method MoveUnit(battleId As %String, unitId As %String, x As %Integer, y As %Int
     return result
 }
 
+Method PrepareCombat(battleId As %String, unitId As %String, targetUnitId As %String) As %DynamicObject [ Private ]
+{
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
+    if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
+    if '$isobject(battle) return ##class(BronzeWars.Service.Result).Error(404, "BATTLE_NOT_FOUND", "La batalla no existe.")
+    if (battle.Status '= "IN_PROGRESS") ! ((battle.Phase '= "MOVEMENT") && (battle.Phase '= "COMBAT")) return ##class(BronzeWars.Service.Result).Error(409, "INVALID_BATTLE_PHASE", "La batalla no admite ataques en esta fase.")
+
+    set attacker = ##class(BronzeWars.Model.BattleUnit).%OpenId(unitId, , .sc)
+    if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
+    set defender = ##class(BronzeWars.Model.BattleUnit).%OpenId(targetUnitId, , .sc)
+    if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
+    if '$isobject(attacker) ! '$isobject(defender) return ##class(BronzeWars.Service.Result).Error(404, "UNIT_NOT_FOUND", "Una de las unidades no existe.")
+    if (attacker.Battle.%Id() '= battleId) ! (defender.Battle.%Id() '= battleId) return ##class(BronzeWars.Service.Result).Error(422, "UNIT_NOT_IN_BATTLE", "Las unidades no pertenecen a la batalla indicada.")
+    if attacker.Army.Side '= "HUMAN" return ##class(BronzeWars.Service.Result).Error(422, "NOT_HUMAN_UNIT", "Solo una unidad humana puede iniciar este ataque.")
+    if attacker.Army.%Id() = defender.Army.%Id() return ##class(BronzeWars.Service.Result).Error(422, "FRIENDLY_FIRE", "No se puede atacar a una unidad del mismo ejercito.")
+    if ('attacker.Active) ! ('defender.Active) ! ('attacker.IsDeployed) ! ('defender.IsDeployed) return ##class(BronzeWars.Service.Result).Error(422, "UNIT_CANNOT_ATTACK", "Ambas unidades deben estar activas y desplegadas.")
+    if attacker.HasAttacked return ##class(BronzeWars.Service.Result).Error(409, "UNIT_ALREADY_ATTACKED", "La unidad ya ha atacado en este turno.")
+
+    set distanceX = attacker.PositionX - defender.PositionX, distanceY = attacker.PositionY - defender.PositionY
+    if distanceX < 0 set distanceX = -distanceX
+    if distanceY < 0 set distanceY = -distanceY
+    set distance = distanceX + distanceY
+    if distance = 0 return ##class(BronzeWars.Service.Result).Error(422, "INVALID_ATTACK_TARGET", "La unidad no puede atacarse a si misma.")
+
+    set attackerStats = attacker.UnitType
+    if $isobject(attacker.UnitProfile) set attackerStats = attacker.UnitProfile
+    if distance = 1 {
+        set combatType = "MELEE"
+    } else {
+        if distance > attackerStats.AttackRange return ##class(BronzeWars.Service.Result).Error(422, "TARGET_OUT_OF_RANGE", "El objetivo esta fuera del alcance de la unidad.")
+        if (attacker.UnitType.InitialProjectiles <= 0) ! (attacker.CurrentProjectiles <= 0) return ##class(BronzeWars.Service.Result).Error(409, "NO_PROJECTILES", "La unidad no dispone de proyectiles para atacar a distancia.")
+        set combatType = "RANGED"
+    }
+
+    set context = {
+        "battleId":(battleId),
+        "type":(combatType),
+        "distance":(distance),
+        "attacker":(..CombatUnitContext(attacker)),
+        "defender":(..CombatUnitContext(defender))
+    }
+    return ##class(BronzeWars.Service.Result).Success(200, context)
+}
+
+Method ApplyCombat(battleId As %String, unitId As %String, targetUnitId As %String, resolution As %DynamicObject) As %DynamicObject [ Private ]
+{
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, 4, .sc)
+    if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
+    set attacker = ##class(BronzeWars.Model.BattleUnit).%OpenId(unitId, 4, .sc)
+    if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
+    set defender = ##class(BronzeWars.Model.BattleUnit).%OpenId(targetUnitId, 4, .sc)
+    if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
+    if '$isobject(battle) ! '$isobject(attacker) ! '$isobject(defender) return ##class(BronzeWars.Service.Result).Error(404, "COMBAT_ENTITY_NOT_FOUND", "No se puede aplicar el resultado del combate.")
+
+    set attackerBefore = attacker.CurrentStrength, defenderBefore = defender.CurrentStrength, projectilesBefore = attacker.CurrentProjectiles
+    set attackerMoraleBefore = attacker.Morale, defenderMoraleBefore = defender.Morale
+    set attackerCasualties = resolution.attackerCasualties, defenderCasualties = resolution.defenderCasualties
+    if (attackerCasualties < 0) ! (defenderCasualties < 0) ! (attackerCasualties > attackerBefore) ! (defenderCasualties > defenderBefore) return ##class(BronzeWars.Service.Result).Error(500, "INVALID_COMBAT_RESULT", "El resultado calculado para el combate no es valido.")
+
+    tstart
+    set result = ""
+    try {
+        set attacker.CurrentStrength = attackerBefore - attackerCasualties
+        set defender.CurrentStrength = defenderBefore - defenderCasualties
+        set attackerMoraleLoss = ##class(BronzeWars.Rules.Morale).LossForCasualties(attacker, attackerCasualties)
+        set defenderMoraleLoss = ##class(BronzeWars.Rules.Morale).LossForCasualties(defender, defenderCasualties)
+        set attacker.Morale = ##class(BronzeWars.Rules.Morale).AfterCasualties(attacker, attackerMoraleBefore, attackerCasualties)
+        set defender.Morale = ##class(BronzeWars.Rules.Morale).AfterCasualties(defender, defenderMoraleBefore, defenderCasualties)
+        set attacker.HasAttacked = 1
+        if resolution.type = "RANGED" set attacker.CurrentProjectiles = projectilesBefore - 1
+        if attacker.CurrentStrength = 0 set attacker.Active = 0, attacker.IsDeployed = 0
+        if defender.CurrentStrength = 0 set defender.Active = 0, defender.IsDeployed = 0
+        set sc = attacker.%Save()
+        $$$ThrowOnError(sc)
+        set sc = defender.%Save()
+        $$$ThrowOnError(sc)
+        set attackerRetreat = {"attempted":false,"moved":false,"path":[]}
+        if (attackerCasualties>0) && (attacker.Morale<20) && attacker.Active {
+            set sc = ..RetreatUnitIfRequired(battle, attacker, .attackerRetreat)
+            $$$ThrowOnError(sc)
+        }
+        set defenderRetreat = {"attempted":false,"moved":false,"path":[]}
+        if (defenderCasualties>0) && (defender.Morale<20) && defender.Active {
+            set sc = ..RetreatUnitIfRequired(battle, defender, .defenderRetreat)
+            $$$ThrowOnError(sc)
+        }
+        set combat = {
+            "type":(resolution.type),
+            "attackerUnitId":(unitId),
+            "defenderUnitId":(targetUnitId),
+            "attackerCasualties":(attackerCasualties),
+            "defenderCasualties":(defenderCasualties),
+            "attackerStrengthBefore":(attackerBefore),
+            "attackerStrengthAfter":(attacker.CurrentStrength),
+            "defenderStrengthBefore":(defenderBefore),
+            "defenderStrengthAfter":(defender.CurrentStrength),
+            "attackerMoraleBefore":(attackerMoraleBefore),
+            "attackerMoraleAfter":(attacker.Morale),
+            "attackerMoraleLoss":(attackerMoraleLoss),
+            "defenderMoraleBefore":(defenderMoraleBefore),
+            "defenderMoraleAfter":(defender.Morale),
+            "defenderMoraleLoss":(defenderMoraleLoss),
+            "attackerDestroyed":('attacker.Active),
+            "defenderDestroyed":('defender.Active),
+            "attackerRetreat":(attackerRetreat),
+            "defenderRetreat":(defenderRetreat),
+            "projectilesBefore":(projectilesBefore),
+            "projectilesAfter":(attacker.CurrentProjectiles)
+        }
+        if resolution.type = "MELEE" {
+            do combat.%Set("attackerMoraleFactor", resolution.attackerMoraleFactor)
+            do combat.%Set("defenderMoraleFactor", resolution.defenderMoraleFactor)
+        } else {
+            do combat.%Set("distance", resolution.distance)
+            do combat.%Set("distanceFactor", resolution.distanceFactor)
+            do combat.%Set("defenseFactor", resolution.defenseFactor)
+        }
+        set sc = ..RecordEvent(battle, "ATTACK_RESOLVED", combat, attacker, defender)
+        $$$ThrowOnError(sc)
+        tcommit
+        set result = ##class(BronzeWars.Service.Result).Success(200, {"battle":(##class(BronzeWars.API.Serializer).Battle(battle)),"combat":(combat)})
+    } catch exception {
+        trollback 1
+        set result = ##class(BronzeWars.Service.Result).InternalError(exception.AsStatus())
+    }
+    return result
+}
+
+Method RetreatUnitIfRequired(battle As BronzeWars.Model.Battle, unit As BronzeWars.Model.BattleUnit, Output retreat As %DynamicObject) As %Status [ Private ]
+{
+    set fromX = +unit.PositionX, fromY = +unit.PositionY
+    set retreat = {"attempted":true,"moved":false,"from":{"x":(fromX),"y":(fromY)},"to":{"x":(fromX),"y":(fromY)},"path":[]}
+    set sc = ##class(BronzeWars.Rules.Retreat).ShortestPath(unit, battle, .path)
+    if $SYSTEM.Status.IsError(sc) return sc
+    set retreat.path = path
+
+    if path.%Size()=0 {
+        return ..RecordEvent(battle, "UNIT_RETREAT_BLOCKED", retreat, unit)
+    }
+
+    set destination = path.%Get(path.%Size() - 1)
+    set unit.PositionX = destination.x, unit.PositionY = destination.y
+    set unit.HasMoved = 1, unit.MovementSpent = unit.UnitProfile.Speed
+    set sc = unit.%Save()
+    if $SYSTEM.Status.IsError(sc) return sc
+
+    set retreat.moved = 1
+    set retreat.to = {"x":(unit.PositionX),"y":(unit.PositionY)}
+    set retreat.morale = +unit.Morale
+    return ..RecordEvent(battle, "UNIT_RETREATED", retreat, unit)
+}
+
+Method CombatUnitContext(unit As BronzeWars.Model.BattleUnit) As %DynamicObject [ Private ]
+{
+    set stats = unit.UnitType
+    if $isobject(unit.UnitProfile) set stats = unit.UnitProfile
+    return {
+        "id":(unit.%Id()),
+        "strength":(unit.CurrentStrength),
+        "morale":(unit.Morale),
+        "attack":(stats.Attack),
+        "defense":(stats.Defense),
+        "damage":(stats.Damage),
+        "range":(stats.AttackRange),
+        "projectiles":(unit.CurrentProjectiles)
+    }
+}
+
 Method PrepareAIMovement(battleId As %String, confirmIncomplete As %Boolean) As %DynamicObject [ Private ]
 {
     set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
@@ -176,6 +348,7 @@ Method NextTurn(battleId As %String, confirmIncomplete As %Boolean, aiMovements 
 
     set previousRound = battle.CurrentRound
     set movementTrace = ##class(%DynamicArray).%New()
+    set combatTrace = ##class(%DynamicArray).%New()
     tstart
     set result = ""
     try {
@@ -210,14 +383,18 @@ Method NextTurn(battleId As %String, confirmIncomplete As %Boolean, aiMovements 
                 $$$ThrowOnError(sc)
                 set sc = ..RecordEvent(battle, "UNIT_MOVED", {"previous":(previous),"current":{"x":(x),"y":(y)},"movementSpent":(distance),"remainingMovement":(speed-distance),"controlledBy":"AI"}, unit)
                 $$$ThrowOnError(sc)
-                do movementTrace.%Push({"unitId":(unitId),"from":(previous),"to":{"x":(x),"y":(y)},"path":(path)})
+                do movementTrace.%Push({"unitId":(unitId),"phase":"APPROACH","from":(previous),"to":{"x":(x),"y":(y)},"path":(path)})
             }
             set movedUnits(unitId) = 1
         }
         set aiArmy = ..FindArmy(battleId, "AI"), aiArmyId = aiArmy.%Id()
         &sql(SELECT COUNT(*) INTO :expectedAIMovements FROM BronzeWars_Model.BattleUnit WHERE Army = :aiArmyId AND Active = 1 AND IsDeployed = 1)
         if aiMovements.%Size() '= expectedAIMovements throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Incomplete AI movement plan"))
-        &sql(UPDATE BronzeWars_Model.BattleUnit SET HasMoved = 0, MovementSpent = 0 WHERE Battle = :battleId AND Active = 1)
+        set sc = ..ExecuteAICombatPhase(battle, aiArmy, .combatTrace, movementTrace)
+        $$$ThrowOnError(sc)
+        set sc = ..RecordEvent(battle, "AI_COMBAT_PHASE", {"attacks":(combatTrace)})
+        $$$ThrowOnError(sc)
+        &sql(UPDATE BronzeWars_Model.BattleUnit SET HasMoved = 0, HasAttacked = 0, MovementSpent = 0 WHERE Battle = :battleId AND Active = 1)
         if SQLCODE < 0 {
             set sc = $$$ERROR($$$GeneralError, "Unable to reset unit movement: " _ SQLCODE _ " " _ $get(%msg))
             $$$ThrowOnError(sc)
@@ -228,12 +405,214 @@ Method NextTurn(battleId As %String, confirmIncomplete As %Boolean, aiMovements 
         set sc = ..RecordEvent(battle, "TURN_ADVANCED", {"previousRound":(previousRound),"currentRound":(battle.CurrentRound),"forced":(pendingUnits>0),"pendingUnits":(pendingUnits)})
         $$$ThrowOnError(sc)
         tcommit
-        set result = ##class(BronzeWars.Service.Result).Success(200, {"battle":(##class(BronzeWars.API.Serializer).Battle(battle)),"aiMovementTrace":(movementTrace)})
+        set result = ##class(BronzeWars.Service.Result).Success(200, {"battle":(##class(BronzeWars.API.Serializer).Battle(battle)),"aiMovementTrace":(movementTrace),"aiCombatTrace":(combatTrace)})
     } catch exception {
         trollback 1
         set result = ##class(BronzeWars.Service.Result).InternalError(exception.AsStatus())
     }
     return result
+}
+
+Method ExecuteAICombatPhase(battle As BronzeWars.Model.Battle, aiArmy As BronzeWars.Model.Army, Output combatTrace As %DynamicArray, movementTrace As %DynamicArray) As %Status [ Private ]
+{
+    set combatTrace = ##class(%DynamicArray).%New(), sc = $$$OK
+    set battleId = battle.%Id(), aiArmyId = aiArmy.%Id()
+    &sql(DECLARE AICombatUnitCursor CURSOR FOR
+        SELECT %ID FROM BronzeWars_Model.BattleUnit
+        WHERE Army = :aiArmyId AND Active = 1 AND IsDeployed = 1 AND HasAttacked = 0
+        ORDER BY %ID)
+    &sql(OPEN AICombatUnitCursor)
+    if SQLCODE < 0 return $$$ERROR($$$GeneralError, "Unable to load AI combat units")
+    for {
+        &sql(FETCH AICombatUnitCursor INTO :attackerId)
+        quit:(SQLCODE'=0)
+        set attacker = ##class(BronzeWars.Model.BattleUnit).%OpenId(attackerId, 4, .sc)
+        if $SYSTEM.Status.IsError(sc) {
+            &sql(CLOSE AICombatUnitCursor)
+            return sc
+        }
+        if '$isobject(attacker) continue
+        set range = 1
+        if (attacker.UnitType.InitialProjectiles>0) && (attacker.CurrentProjectiles>0) {
+            set range = attacker.UnitType.AttackRange
+            if $isobject(attacker.UnitProfile) set range = attacker.UnitProfile.AttackRange
+        }
+        set defender = ..FindNearestAttackTarget(battleId, attacker, range, .distance)
+        if '$isobject(defender) continue
+        set combatType = $select(distance=1:"MELEE", 1:"RANGED")
+
+        set attackerMoraleBefore = attacker.Morale, defenderMoraleBefore = defender.Morale
+        set attackerStrengthBefore = attacker.CurrentStrength, defenderStrengthBefore = defender.CurrentStrength
+        set projectilesBefore = attacker.CurrentProjectiles
+        set attackFrom = {"x":(attacker.PositionX),"y":(attacker.PositionY)}
+        set defenderPosition = {"x":(defender.PositionX),"y":(defender.PositionY)}
+        set context = {"type":(combatType),"distance":(distance),"attacker":(..CombatUnitContext(attacker)),"defender":(..CombatUnitContext(defender))}
+        set resolution = ##class(BronzeWars.Rules.Combat).Resolve(context)
+
+        set attacker.CurrentStrength = attackerStrengthBefore - resolution.attackerCasualties
+        set defender.CurrentStrength = defenderStrengthBefore - resolution.defenderCasualties
+        set attackerMoraleLoss = ##class(BronzeWars.Rules.Morale).LossForCasualties(attacker, resolution.attackerCasualties)
+        set defenderMoraleLoss = ##class(BronzeWars.Rules.Morale).LossForCasualties(defender, resolution.defenderCasualties)
+        set attacker.Morale = ##class(BronzeWars.Rules.Morale).AfterCasualties(attacker, attackerMoraleBefore, resolution.attackerCasualties)
+        set defender.Morale = ##class(BronzeWars.Rules.Morale).AfterCasualties(defender, defenderMoraleBefore, resolution.defenderCasualties)
+        if combatType="RANGED" set attacker.CurrentProjectiles = projectilesBefore - 1
+        set attacker.HasAttacked = 1
+        if attacker.CurrentStrength=0 set attacker.Active = 0, attacker.IsDeployed = 0
+        if defender.CurrentStrength=0 set defender.Active = 0, defender.IsDeployed = 0
+        set sc = attacker.%Save()
+        if $SYSTEM.Status.IsError(sc) {
+            &sql(CLOSE AICombatUnitCursor)
+            return sc
+        }
+        set sc = defender.%Save()
+        if $SYSTEM.Status.IsError(sc) {
+            &sql(CLOSE AICombatUnitCursor)
+            return sc
+        }
+
+        set attackerRetreat = {"attempted":false,"moved":false,"path":[]}
+        if (resolution.attackerCasualties>0) && (attacker.Morale<20) && attacker.Active {
+            set sc = ..RetreatUnitIfRequired(battle, attacker, .attackerRetreat)
+            if $SYSTEM.Status.IsError(sc) {
+                &sql(CLOSE AICombatUnitCursor)
+                return sc
+            }
+        }
+        set defenderRetreat = {"attempted":false,"moved":false,"path":[]}
+        if (resolution.defenderCasualties>0) && (defender.Morale<20) && defender.Active {
+            set sc = ..RetreatUnitIfRequired(battle, defender, .defenderRetreat)
+            if $SYSTEM.Status.IsError(sc) {
+                &sql(CLOSE AICombatUnitCursor)
+                return sc
+            }
+        }
+        set postAttackRetreat = {"attempted":false,"moved":false,"path":[]}
+        if (combatType="RANGED") && attacker.Active {
+            set sc = ..RetreatProjectileAfterAttack(battle, attacker, defenderPosition.x, defenderPosition.y, .postAttackRetreat, movementTrace)
+            if $SYSTEM.Status.IsError(sc) {
+                &sql(CLOSE AICombatUnitCursor)
+                return sc
+            }
+        }
+
+        set combat = {
+            "type":(combatType),
+            "controlledBy":"AI",
+            "attackerUnitId":(attackerId),
+            "defenderUnitId":(defender.%Id()),
+            "distance":(distance),
+            "attackFrom":(attackFrom),
+            "defenderPosition":(defenderPosition),
+            "attackerCasualties":(resolution.attackerCasualties),
+            "defenderCasualties":(resolution.defenderCasualties),
+            "attackerStrengthBefore":(attackerStrengthBefore),
+            "attackerStrengthAfter":(attacker.CurrentStrength),
+            "defenderStrengthBefore":(defenderStrengthBefore),
+            "defenderStrengthAfter":(defender.CurrentStrength),
+            "attackerMoraleBefore":(attackerMoraleBefore),
+            "attackerMoraleAfter":(attacker.Morale),
+            "attackerMoraleLoss":(attackerMoraleLoss),
+            "defenderMoraleBefore":(defenderMoraleBefore),
+            "defenderMoraleAfter":(defender.Morale),
+            "defenderMoraleLoss":(defenderMoraleLoss),
+            "attackerDestroyed":('attacker.Active),
+            "defenderDestroyed":('defender.Active),
+            "attackerRetreat":(attackerRetreat),
+            "defenderRetreat":(defenderRetreat),
+            "postAttackRetreat":(postAttackRetreat),
+            "projectilesBefore":(projectilesBefore),
+            "projectilesAfter":(attacker.CurrentProjectiles)
+        }
+        if combatType="MELEE" {
+            do combat.%Set("attackerMoraleFactor", resolution.attackerMoraleFactor)
+            do combat.%Set("defenderMoraleFactor", resolution.defenderMoraleFactor)
+        } else {
+            do combat.%Set("distanceFactor", resolution.distanceFactor)
+            do combat.%Set("defenseFactor", resolution.defenseFactor)
+        }
+        set sc = ..RecordEvent(battle, "ATTACK_RESOLVED", combat, attacker, defender)
+        if $SYSTEM.Status.IsError(sc) {
+            &sql(CLOSE AICombatUnitCursor)
+            return sc
+        }
+        do combatTrace.%Push(combat)
+    }
+    &sql(CLOSE AICombatUnitCursor)
+    return sc
+}
+
+Method FindNearestAttackTarget(battleId As %String, attacker As BronzeWars.Model.BattleUnit, range As %Integer, Output nearestDistance As %Integer) As BronzeWars.Model.BattleUnit [ Private ]
+{
+    set target = "", nearestDistance = range + 1
+    &sql(DECLARE AIRangedTargetCursor CURSOR FOR
+        SELECT u.%ID FROM BronzeWars_Model.BattleUnit u
+        JOIN BronzeWars_Model.Army a ON u.Army = a.%ID
+        WHERE u.Battle = :battleId AND a.Side = 'HUMAN' AND u.Active = 1 AND u.IsDeployed = 1
+        ORDER BY u.%ID)
+    &sql(OPEN AIRangedTargetCursor)
+    for {
+        &sql(FETCH AIRangedTargetCursor INTO :targetId)
+        quit:(SQLCODE'=0)
+        set candidate = ##class(BronzeWars.Model.BattleUnit).%OpenId(targetId)
+        set dx = candidate.PositionX - attacker.PositionX, dy = candidate.PositionY - attacker.PositionY
+        if dx<0 set dx = -dx
+        if dy<0 set dy = -dy
+        set candidateDistance = dx + dy
+        if (candidateDistance>0) && (candidateDistance<=range) && (candidateDistance<nearestDistance) {
+            set target = candidate, nearestDistance = candidateDistance
+        }
+    }
+    &sql(CLOSE AIRangedTargetCursor)
+    return target
+}
+
+Method RetreatProjectileAfterAttack(battle As BronzeWars.Model.Battle, unit As BronzeWars.Model.BattleUnit, enemyX As %Integer, enemyY As %Integer, Output retreat As %DynamicObject, movementTrace As %DynamicArray) As %Status [ Private ]
+{
+    set speed = unit.UnitType.Speed
+    if $isobject(unit.UnitProfile) set speed = unit.UnitProfile.Speed
+    set remaining = speed - unit.MovementSpent
+    set from = {"x":(unit.PositionX),"y":(unit.PositionY)}
+    set path = ##class(%DynamicArray).%New()
+    set retreat = {"attempted":(remaining>0),"moved":false,"from":(from),"to":(from),"path":(path)}
+    if remaining<=0 return $$$OK
+
+    set battleId = battle.%Id(), unitId = unit.%Id(), x = unit.PositionX, y = unit.PositionY
+    set currentSafety = ..CardinalDistance(x, y, enemyX, enemyY)
+    set directions = $listbuild($listbuild(0, -1), $listbuild(-1, 0), $listbuild(1, 0), $listbuild(0, 1))
+    for step=1:1:remaining {
+        set bestX = x, bestY = y, bestSafety = currentSafety
+        for directionIndex=1:1:4 {
+            set direction = $listget(directions, directionIndex)
+            set candidateX = x + $listget(direction, 1), candidateY = y + $listget(direction, 2)
+            continue:(candidateX<0)!(candidateX'<battle.BoardWidth)!(candidateY<0)!(candidateY'<battle.BoardHeight)
+            &sql(SELECT COUNT(*) INTO :occupied FROM BronzeWars_Model.BattleUnit WHERE Battle = :battleId AND Active = 1 AND IsDeployed = 1 AND PositionX = :candidateX AND PositionY = :candidateY AND %ID <> :unitId)
+            continue:occupied>0
+            set safety = ..CardinalDistance(candidateX, candidateY, enemyX, enemyY)
+            if safety>bestSafety set bestX = candidateX, bestY = candidateY, bestSafety = safety
+        }
+        quit:(bestX=x)&&(bestY=y)
+        set x = bestX, y = bestY, currentSafety = bestSafety
+        do path.%Push({"x":(x),"y":(y)})
+    }
+    if path.%Size()=0 return $$$OK
+
+    set unit.PositionX = x, unit.PositionY = y
+    set unit.MovementSpent = unit.MovementSpent + path.%Size(), unit.HasMoved = 1
+    set sc = unit.%Save()
+    if $SYSTEM.Status.IsError(sc) return sc
+    set retreat.moved = 1, retreat.to = {"x":(x),"y":(y)}
+    set sc = ..RecordEvent(battle, "UNIT_MOVED", {"previous":(from),"current":{"x":(x),"y":(y)},"movementSpent":(unit.MovementSpent),"remainingMovement":(speed-unit.MovementSpent),"controlledBy":"AI","phase":"POST_ATTACK_RETREAT"}, unit)
+    if $SYSTEM.Status.IsError(sc) return sc
+    do movementTrace.%Push({"unitId":(unitId),"phase":"POST_ATTACK_RETREAT","from":(from),"to":{"x":(x),"y":(y)},"path":(path)})
+    return $$$OK
+}
+
+Method CardinalDistance(x1 As %Integer, y1 As %Integer, x2 As %Integer, y2 As %Integer) As %Integer [ Private ]
+{
+    set dx = x2 - x1, dy = y2 - y1
+    if dx<0 set dx = -dx
+    if dy<0 set dy = -dy
+    return dx + dy
 }
 
 Method GetBattle(battleId As %String) As %DynamicObject [ Private ]
@@ -384,7 +763,6 @@ Method CreateAIUnits(battleId As %String, composition As %DynamicArray, source A
 
     set aiArmyId = aiArmy.%Id()
     &sql(SELECT COUNT(*) INTO :existingUnits FROM BronzeWars_Model.BattleUnit WHERE Army = :aiArmyId AND Active = 1)
-    if existingUnits > 0 return ..PrepareAIDeployment(battleId)
 
     set sc = ##class(BronzeWars.Rules.ArmyBudget).ValidateComposition(composition, battle.BoardWidth * 3, .totalGrain, .totalUnits)
     if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).Error(422, "INVALID_AI_COMPOSITION", "La composicion propuesta para la IA no es valida.")
@@ -392,6 +770,25 @@ Method CreateAIUnits(battleId As %String, composition As %DynamicArray, source A
     tstart
     set result = ""
     try {
+        // A previous start attempt may have committed an army whose deployment
+        // was later rejected. Rebuild it from the current validated plan so that
+        // retrying START_BATTLE repairs that intermediate state.
+        if existingUnits > 0 {
+            &sql(DECLARE ExistingAIUnitCursor CURSOR FOR SELECT %ID FROM BronzeWars_Model.BattleUnit WHERE Army = :aiArmyId)
+            &sql(OPEN ExistingAIUnitCursor)
+            for {
+                &sql(FETCH ExistingAIUnitCursor INTO :existingUnitId)
+                quit:(SQLCODE'=0)
+                set sc = ##class(BronzeWars.Model.BattleUnit).%DeleteId(existingUnitId)
+                $$$ThrowOnError(sc)
+            }
+            &sql(CLOSE ExistingAIUnitCursor)
+            &sql(DELETE FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'AI_ARMY_SELECTED')
+            if SQLCODE < 0 {
+                set sc = $$$ERROR($$$GeneralError, "Unable to replace the previous AI army selection event: " _ SQLCODE _ " " _ $get(%msg))
+                $$$ThrowOnError(sc)
+            }
+        }
         set sc = ..CreateUnits(battle, aiArmy, composition)
         $$$ThrowOnError(sc)
         set sc = ..RecordEvent(battle, "AI_ARMY_SELECTED", {"commanderType":(aiArmy.CommanderType),"source":(source),"reasoning":(reasoning),"grainSpent":(totalGrain),"unitCount":(totalUnits),"composition":(composition)})

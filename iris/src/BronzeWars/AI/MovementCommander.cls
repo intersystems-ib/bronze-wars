@@ -1,57 +1,6 @@
 Class BronzeWars.AI.MovementCommander Extends %RegisteredObject
 {
 
-ClassMethod BuildAgentGoal(context As %DynamicObject) As %String
-{
-    set instruction = ##class(BronzeWars.AI.Commanders.Strategy).MovementInstruction(context.commanderType)
-    return "Planifica el movimiento de la batalla " _ context.battleId _ ". Eres un comandante " _ context.commanderName _ ". " _ instruction _ " Ejecuta el flujo de herramientas configurado y finaliza cuando SubmitMovementChoices confirme todas las elecciones."
-}
-
-ClassMethod ParseChoices(content As %String, context As %DynamicObject, Output movements As %DynamicArray, Output reasoning As %String) As %Status
-{
-    set movements = ##class(%DynamicArray).%New(), reasoning = "", result = $$$OK
-    try {
-        set json = ##class(BronzeWars.AI.DeploymentCommander).CleanJSON(content)
-        set answer = ##class(%DynamicObject).%FromJSON(json)
-        if answer.%GetTypeOf("choices") '= "array" throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "AI Hub response has no choices array"))
-        if answer.choices.%Size() '= context.aiUnits.%Size() throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "AI Hub response has an unexpected unit count"))
-
-        set sc = ##class(BronzeWars.AI.MovementRecommendationGenerator).Generate(context, .recommendations)
-        if $SYSTEM.Status.IsError(sc) throw ##class(%Exception.StatusException).CreateFromStatus(sc)
-        kill recommendationById, seen
-        for index = 0:1:(recommendations.%Size() - 1) {
-            set recommendation = recommendations.%Get(index), recommendationById(recommendation.unitId _ "") = recommendation
-        }
-        set offensiveCount = 0, neutralCount = 0, defensiveCount = 0
-        for index = 0:1:(answer.choices.%Size() - 1) {
-            set choice = answer.choices.%Get(index)
-            if ('$isobject(choice)) ! (choice.%Size() '= 2) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Invalid AI Hub movement choice"))
-            set unitId = choice.%Get(0) _ "", stance = $zconvert(choice.%Get(1), "U")
-            if '$data(recommendationById(unitId)) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Unknown unit in AI Hub movement choice"))
-            if $data(seen(unitId)) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Duplicated unit in AI Hub movement choice"))
-            if (stance '= "O") && (stance '= "N") && (stance '= "D") throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Unknown AI Hub movement stance"))
-            set stanceById(unitId) = stance, seen(unitId) = 1
-            if stance = "O" set offensiveCount = offensiveCount + 1
-            if stance = "N" set neutralCount = neutralCount + 1
-            if stance = "D" set defensiveCount = defensiveCount + 1
-        }
-        set sc = ##class(BronzeWars.AI.DeterministicMovementGenerator).Generate(context, .executionOrder)
-        if $SYSTEM.Status.IsError(sc) throw ##class(%Exception.StatusException).CreateFromStatus(sc)
-        for index = 0:1:(executionOrder.%Size() - 1) {
-            set orderedUnit = executionOrder.%Get(index), unitId = orderedUnit.unitId _ "", recommendation = recommendationById(unitId), destination = recommendation.%Get(stanceById(unitId))
-            do movements.%Push({"unitId":(+unitId),"x":(destination.x),"y":(destination.y)})
-        }
-        set validationAnswer = {"movements":(movements),"reasoning":"AI Hub tool choices"}
-        set sc = ..ParseAndValidate(validationAnswer.%ToJSON(), context, .validated, .ignoredReasoning)
-        if $SYSTEM.Status.IsError(sc) throw ##class(%Exception.StatusException).CreateFromStatus(sc)
-        set movements = validated
-        set reasoning = "AI Hub eligio " _ offensiveCount _ " movimientos ofensivos, " _ neutralCount _ " neutrales y " _ defensiveCount _ " defensivos a partir de recomendaciones validadas."
-    } catch exception {
-        set result = exception.AsStatus()
-    }
-    return result
-}
-
 ClassMethod ParseAndValidate(content As %String, context As %DynamicObject, Output movements As %DynamicArray, Output reasoning As %String) As %Status
 {
     set movements = ##class(%DynamicArray).%New(), reasoning = "", result = $$$OK

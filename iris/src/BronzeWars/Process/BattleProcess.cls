@@ -1,7 +1,7 @@
 Class BronzeWars.Process.BattleProcess Extends BronzeWars.Process.BaseProcess
 {
 
-Parameter ALLOWEDACTIONS = "CREATE_BATTLE,GET_BATTLE,START_BATTLE,MOVE_UNIT,NEXT_TURN";
+Parameter ALLOWEDACTIONS = "CREATE_BATTLE,GET_BATTLE,START_BATTLE,MOVE_UNIT,ATTACK_UNIT,NEXT_TURN";
 
 Method OnRequest(request As BronzeWars.Message.Request, Output response As BronzeWars.Message.Response) As %Status
 {
@@ -61,14 +61,40 @@ Method OnRequest(request As BronzeWars.Message.Request, Output response As Bronz
         lock -^BronzeWarsBattleLock(payload.battleId)
         return sc
     }
-    if request.Action = "MOVE_UNIT" {
+    if (request.Action = "MOVE_UNIT") || (request.Action = "ATTACK_UNIT") {
         lock +^BronzeWarsBattleLock(payload.battleId):5
         if '$test return ..SetError(.response, 409, "BATTLE_BUSY", "La batalla esta siendo modificada por otra peticion.")
-        set sc = ..SendToOperation(request, .response)
+        if request.Action = "ATTACK_UNIT" {
+            set sc = ..ResolveCombat(request, .response)
+        } else {
+            set sc = ..SendToOperation(request, .response)
+        }
         lock -^BronzeWarsBattleLock(payload.battleId)
         return sc
     }
     return ..SendToOperation(request, .response)
+}
+
+Method ResolveCombat(request As BronzeWars.Message.Request, Output response As BronzeWars.Message.Response) As %Status [ Private ]
+{
+    set payload = request.Payload()
+    set prepareRequest = ##class(BronzeWars.Message.Request).%New()
+    set prepareRequest.Action = "PREPARE_COMBAT"
+    set prepareRequest.PayloadJSON = payload.%ToJSON()
+    set sc = ..SendRequestSync(..#OPERATION, prepareRequest, .prepareResponse)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set prepareResult = prepareResponse.Result()
+    if 'prepareResult.ok {
+        set response = prepareResponse
+        return $$$OK
+    }
+
+    set resolution = ##class(BronzeWars.Rules.Combat).Resolve(prepareResult.data)
+    do payload.%Set("resolution", resolution)
+    set applyRequest = ##class(BronzeWars.Message.Request).%New()
+    set applyRequest.Action = "APPLY_COMBAT"
+    set applyRequest.PayloadJSON = payload.%ToJSON()
+    return ..SendRequestSync(..#OPERATION, applyRequest, .response)
 }
 
 Method AdvanceTurnWithCommander(request As BronzeWars.Message.Request, Output response As BronzeWars.Message.Response) As %Status [ Private ]
@@ -84,22 +110,9 @@ Method AdvanceTurnWithCommander(request As BronzeWars.Message.Request, Output re
         set response = contextResponse
         return $$$OK
     }
-    set context = contextResult.data, source = "DETERMINISTIC_FALLBACK", reasoning = "Movimiento tactico de respaldo basado en cohesion, alcance y flancos."
+    set context = contextResult.data, source = "DETERMINISTIC", reasoning = "Movimiento tactico basado en cohesion, alcance y flancos."
     set sc = ##class(BronzeWars.AI.DeterministicMovementGenerator).Generate(context, .movements)
     if $SYSTEM.Status.IsError(sc) return ..SetError(.response, 500, "AI_MOVEMENT_FAILED", "No se ha podido generar el movimiento de la IA.")
-
-    set llmRequest = ##class(BronzeWars.Message.Request).%New()
-    set llmRequest.Action = "PLAN_AI_MOVEMENT"
-    set llmRequest.PayloadJSON = {"battleId":(context.battleId),"goal":(##class(BronzeWars.AI.MovementCommander).BuildAgentGoal(context))}.%ToJSON()
-    set llmStatus = ..SendRequestSync("LLM Operation", llmRequest, .llmResponse)
-    if $SYSTEM.Status.IsOK(llmStatus), $isobject(llmResponse) {
-        set llmResult = llmResponse.Result()
-        if llmResult.ok {
-            set validation = ##class(BronzeWars.AI.MovementCommander).ParseChoices(llmResult.data.content, context, .llmMovements, .llmReasoning)
-            if $SYSTEM.Status.IsOK(validation) set movements = llmMovements, source = "AI_HUB_TOOL", reasoning = llmReasoning
-            if $SYSTEM.Status.IsError(validation) $$$LOGWARNING("Invalid LLM movement response: " _ $SYSTEM.Status.GetErrorText(validation) _ " Content: " _ llmResult.data.content)
-        }
-    }
     do payload.%Set("aiMovements", movements)
     do payload.%Set("movementSource", source)
     do payload.%Set("movementReasoning", reasoning)
@@ -165,7 +178,10 @@ Method StartWithCommander(request As BronzeWars.Message.Request, Output response
     }
     if source '= "LLM" {
         set sc = ##class(BronzeWars.AI.DeterministicDeploymentGenerator).GenerateFromContext(context, .proposal)
-        if $SYSTEM.Status.IsError(sc) return ..SetError(.response, 500, "AI_DEPLOYMENT_FAILED", "No se ha podido generar el despliegue de la IA.")
+        if $SYSTEM.Status.IsError(sc) {
+            $$$LOGERROR("Deterministic AI deployment failed for battle " _ payload.battleId _ ": " _ $SYSTEM.Status.GetErrorText(sc))
+            return ..SetError(.response, 500, "AI_DEPLOYMENT_FAILED", "No se ha podido generar el despliegue de la IA.")
+        }
         set reasoning = "El despliegue de respaldo iguala o supera las " _ context.humanFormation.frontage _ " columnas del frente humano, mantiene una linea principal apoyada y reserva la retaguardia para los arqueros."
     }
 

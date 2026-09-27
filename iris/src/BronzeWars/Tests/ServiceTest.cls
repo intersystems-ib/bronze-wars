@@ -209,6 +209,237 @@ Method Test04ArmyCompositionBudget()
     do $$$AssertEquals(result.code, "GRAIN_BUDGET_EXCEEDED", "A composition over 100 grain is rejected")
 }
 
+Method Test05AdjacentMeleeCombat()
+{
+    set battleJSON = ..CreateBattle("Adjacent melee combat test"), battleId = battleJSON.id
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
+    do $$$AssertStatusOK(sc, "Combat battle can be opened")
+    set battle.Status = "IN_PROGRESS", battle.Phase = "MOVEMENT", battle.CurrentRound = 1
+    set sc = battle.%Save()
+    do $$$AssertStatusOK(sc, "Combat fixture battle can be started")
+
+    set attacker = ##class(BronzeWars.Model.BattleUnit).%OpenId(battleJSON.armies.%Get(0).units.%Get(0).id, , .sc)
+    do $$$AssertStatusOK(sc, "Attacker can be opened")
+    set attacker.PositionX = 5, attacker.PositionY = 5, attacker.IsDeployed = 1, attacker.Morale = 80
+    set sc = attacker.%Save()
+    do $$$AssertStatusOK(sc, "Attacker can be prepared")
+
+    set aiArmy = ..FindArmy(battleId, "AI")
+    set defenderType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_INFANTRY")
+    set defenderProfile = ##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(defenderType.%Id(), aiArmy.Faction)
+    set defender = ##class(BronzeWars.Model.BattleUnit).%New(defenderType, defenderProfile)
+    set defender.Battle = battle, defender.Army = aiArmy, defender.Name = "Melee defender"
+    set defender.PositionX = 5, defender.PositionY = 4, defender.IsDeployed = 1, defender.Morale = 100
+    set sc = defender.%Save()
+    do $$$AssertStatusOK(sc, "Defender can be prepared")
+
+    set attackerStats = attacker.UnitType
+    if $isobject(attacker.UnitProfile) set attackerStats = attacker.UnitProfile
+    set defenderStats = defender.UnitType
+    if $isobject(defender.UnitProfile) set defenderStats = defender.UnitProfile
+    set expected = ##class(BronzeWars.Rules.Combat).Resolve({
+        "attacker":{"strength":(attacker.CurrentStrength),"morale":(attacker.Morale),"attack":(attackerStats.Attack),"defense":(attackerStats.Defense),"damage":(attackerStats.Damage)},
+        "defender":{"strength":(defender.CurrentStrength),"morale":(defender.Morale),"attack":(defenderStats.Attack),"defense":(defenderStats.Defense),"damage":(defenderStats.Damage)}
+    })
+    set attackerBefore = attacker.CurrentStrength, defenderBefore = defender.CurrentStrength
+    set result = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, attacker.%Id(), defender.%Id())
+    do $$$AssertTrue(result.ok, "Adjacent units can resolve melee combat through the production")
+    do $$$AssertEquals(result.data.combat.attackerCasualties, expected.attackerCasualties, "The attacker receives the calculated casualties")
+    do $$$AssertEquals(result.data.combat.defenderCasualties, expected.defenderCasualties, "The defender receives the calculated casualties")
+    set responseDefenderMorale = ""
+    for armyIndex = 0:1:(result.data.battle.armies.%Size() - 1) {
+        set responseArmy = result.data.battle.armies.%Get(armyIndex)
+        for responseUnitIndex = 0:1:(responseArmy.units.%Size() - 1) {
+            set responseUnit = responseArmy.units.%Get(responseUnitIndex)
+            if responseUnit.id = defender.%Id() set responseDefenderMorale = responseUnit.morale
+        }
+    }
+    do $$$AssertEquals(responseDefenderMorale, 100 - expected.defenderCasualties, "The combat response immediately exposes updated defender morale")
+    set storedAttacker = ##class(BronzeWars.Model.BattleUnit).%OpenId(attacker.%Id())
+    set storedDefender = ##class(BronzeWars.Model.BattleUnit).%OpenId(defender.%Id())
+    do storedAttacker.%Reload()
+    do storedDefender.%Reload()
+    do $$$AssertEquals(storedAttacker.CurrentStrength, attackerBefore - expected.attackerCasualties, "Attacker casualties are persisted")
+    do $$$AssertEquals(storedDefender.CurrentStrength, defenderBefore - expected.defenderCasualties, "Defender casualties are persisted")
+    do $$$AssertEquals(storedAttacker.Morale, 80 - expected.attackerCasualties, "Attacker morale falls by its casualties")
+    do $$$AssertEquals(storedDefender.Morale, 100 - expected.defenderCasualties, "Defender morale falls by its casualties")
+    do $$$AssertTrue(storedAttacker.HasAttacked, "The attacker is marked as having attacked")
+    &sql(SELECT COUNT(*) INTO :combatEvents FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'ATTACK_RESOLVED')
+    do $$$AssertEquals(combatEvents, 1, "The resolved combat is recorded once")
+
+    set repeated = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, attacker.%Id(), defender.%Id())
+    do $$$AssertEquals(repeated.code, "UNIT_ALREADY_ATTACKED", "A unit cannot attack twice in the same turn")
+
+    set rangedUnitId = ""
+    for unitIndex = 0:1:(battleJSON.armies.%Get(0).units.%Size() - 1) {
+        set candidate = battleJSON.armies.%Get(0).units.%Get(unitIndex)
+        if (candidate.type.code = "LIGHT_CAVALRY") && (rangedUnitId = "") set rangedUnitId = candidate.id
+    }
+    set rangedAttacker = ##class(BronzeWars.Model.BattleUnit).%OpenId(rangedUnitId)
+    set rangedAttacker.PositionX = 5, rangedAttacker.PositionY = 6, rangedAttacker.IsDeployed = 1
+    set sc = rangedAttacker.%Save()
+    do $$$AssertStatusOK(sc, "Ranged attacker can be prepared")
+    set defenderBefore = storedDefender.CurrentStrength, projectilesBefore = rangedAttacker.CurrentProjectiles
+    set rangedResult = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, rangedAttacker.%Id(), defender.%Id())
+    do $$$AssertTrue(rangedResult.ok, "A projectile unit can attack a non-adjacent enemy")
+    do $$$AssertEquals(rangedResult.data.combat.type, "RANGED", "The engagement is identified as ranged combat")
+    do $$$AssertEquals(rangedResult.data.combat.attackerCasualties, 0, "The ranged attacker receives no retaliation")
+    do $$$AssertTrue(rangedResult.data.combat.defenderCasualties > 0, "The ranged defender receives calculated casualties")
+    do $$$AssertEquals(rangedResult.data.combat.projectilesAfter, projectilesBefore - 1, "A ranged attack consumes one projectile")
+    do rangedAttacker.%Reload()
+    do storedDefender.%Reload()
+    do $$$AssertEquals(rangedAttacker.CurrentProjectiles, projectilesBefore - 1, "Remaining projectiles are persisted")
+    do $$$AssertEquals(storedDefender.CurrentStrength, defenderBefore - rangedResult.data.combat.defenderCasualties, "Ranged casualties are persisted")
+    do $$$AssertEquals(storedDefender.Morale, 100 - expected.defenderCasualties - rangedResult.data.combat.defenderCasualties, "Ranged casualties also reduce morale")
+}
+
+Method Test06LowMoraleUnitRetreatsAroundObstacles()
+{
+    set battleJSON = ..CreateBattle("Low morale retreat test"), battleId = battleJSON.id
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
+    do $$$AssertStatusOK(sc, "Retreat battle can be opened")
+    set battle.Status = "IN_PROGRESS", battle.Phase = "MOVEMENT", battle.CurrentRound = 1
+    set sc = battle.%Save()
+    do $$$AssertStatusOK(sc, "Retreat fixture battle can be started")
+
+    set attacker = ##class(BronzeWars.Model.BattleUnit).%OpenId(battleJSON.armies.%Get(0).units.%Get(0).id, , .sc)
+    do $$$AssertStatusOK(sc, "Retreat attacker can be opened")
+    set attacker.PositionX = 5, attacker.PositionY = 5, attacker.IsDeployed = 1, attacker.Morale = 100
+    set sc = attacker.%Save()
+    do $$$AssertStatusOK(sc, "Retreat attacker can be prepared")
+
+    set aiArmy = ..FindArmy(battleId, "AI")
+    set defenderType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_INFANTRY")
+    set defenderProfile = ##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(defenderType.%Id(), aiArmy.Faction)
+    set defender = ##class(BronzeWars.Model.BattleUnit).%New(defenderType, defenderProfile)
+    set defender.Battle = battle, defender.Army = aiArmy, defender.Name = "Retreating defender"
+    set defender.PositionX = 5, defender.PositionY = 4, defender.IsDeployed = 1, defender.Morale = 20
+    set sc = defender.%Save()
+    do $$$AssertStatusOK(sc, "Retreating defender can be prepared")
+
+    set blocker = ##class(BronzeWars.Model.BattleUnit).%New(defenderType, defenderProfile)
+    set blocker.Battle = battle, blocker.Army = aiArmy, blocker.Name = "Retreat blocker"
+    set blocker.PositionX = 5, blocker.PositionY = 3, blocker.IsDeployed = 1
+    set sc = blocker.%Save()
+    do $$$AssertStatusOK(sc, "The direct retreat path can be blocked")
+
+    set result = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, attacker.%Id(), defender.%Id())
+    do $$$AssertTrue(result.ok, "Combat that breaks morale is resolved")
+    do $$$AssertTrue(result.data.combat.defenderCasualties > 0, "The defender suffers casualties")
+    do $$$AssertEquals(result.data.combat.defenderMoraleAfter, 20 - result.data.combat.defenderCasualties, "Morale falls by exactly the casualties suffered")
+    do $$$AssertTrue(result.data.combat.defenderRetreat.attempted, "A surviving unit below 20 morale attempts to retreat")
+    do $$$AssertTrue(result.data.combat.defenderRetreat.moved, "The unit finds an unblocked retreat route")
+    do $$$AssertEquals(result.data.combat.defenderRetreat.path.%Size(), defenderProfile.Speed, "The retreat is limited by unit speed")
+
+    do defender.%Reload()
+    do $$$AssertEquals(defender.PositionX, 4, "The retreat avoids the occupied cell")
+    do $$$AssertEquals(defender.PositionY, 4, "The first detour remains on the same row")
+    do $$$AssertTrue(defender.HasMoved, "A retreat consumes the movement action")
+    do $$$AssertEquals(defender.MovementSpent, defenderProfile.Speed, "A retreat exhausts the unit's movement")
+    &sql(SELECT COUNT(*) INTO :retreatEvents FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'UNIT_RETREATED')
+    do $$$AssertEquals(retreatEvents, 1, "The successful retreat is recorded")
+}
+
+Method Test07AIProjectileCombatPhase()
+{
+    set battleJSON = ..CreateBattle("AI projectile combat phase test"), battleId = battleJSON.id
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
+    do $$$AssertStatusOK(sc, "AI combat battle can be opened")
+    set battle.Status = "IN_PROGRESS", battle.Phase = "MOVEMENT", battle.CurrentRound = 1
+    set sc = battle.%Save()
+    do $$$AssertStatusOK(sc, "AI combat fixture can be started")
+
+    set nearTarget = ##class(BronzeWars.Model.BattleUnit).%OpenId(battleJSON.armies.%Get(0).units.%Get(0).id)
+    set nearTarget.PositionX = 5, nearTarget.PositionY = 5, nearTarget.IsDeployed = 1, nearTarget.HasMoved = 1
+    set sc = nearTarget.%Save()
+    do $$$AssertStatusOK(sc, "The nearest human target can be prepared")
+    set farTarget = ##class(BronzeWars.Model.BattleUnit).%OpenId(battleJSON.armies.%Get(0).units.%Get(1).id)
+    set farTarget.PositionX = 8, farTarget.PositionY = 5, farTarget.IsDeployed = 1, farTarget.HasMoved = 1
+    set sc = farTarget.%Save()
+    do $$$AssertStatusOK(sc, "A farther human target can be prepared")
+
+    set aiArmy = ..FindArmy(battleId, "AI")
+    set attackerType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY")
+    set attackerProfile = ##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(attackerType.%Id(), aiArmy.Faction)
+    set attacker = ##class(BronzeWars.Model.BattleUnit).%New(attackerType, attackerProfile)
+    set attacker.Battle = battle, attacker.Army = aiArmy, attacker.Name = "AI mounted archer"
+    set attacker.PositionX = 5, attacker.PositionY = 1, attacker.IsDeployed = 1
+    set sc = attacker.%Save()
+    do $$$AssertStatusOK(sc, "The AI projectile unit can be prepared")
+    set projectilesBefore = attacker.CurrentProjectiles, targetStrengthBefore = nearTarget.CurrentStrength
+
+    set result = ##class(BronzeWars.Interop.Client).NextTurn(battleId, 1)
+    do $$$AssertTrue(result.ok, "The AI movement and combat phases complete")
+    do $$$AssertEquals(result.data.aiCombatTrace.%Size(), 1, "Every eligible projectile unit attacks once")
+    set combat = result.data.aiCombatTrace.%Get(0)
+    do $$$AssertEquals(combat.attackerUnitId, attacker.%Id(), "The combat trace identifies the AI attacker")
+    do $$$AssertEquals(combat.defenderUnitId, nearTarget.%Id(), "The closest target in range is prioritized")
+    do $$$AssertTrue(combat.defenderCasualties > 0, "The AI ranged attack causes casualties")
+    do $$$AssertEquals(result.data.aiMovementTrace.%Size(), 2, "The trace contains approach and post-attack retreat")
+    do $$$AssertEquals(result.data.aiMovementTrace.%Get(0).phase, "APPROACH", "The unit first approaches projectile range")
+    do $$$AssertEquals(result.data.aiMovementTrace.%Get(1).phase, "POST_ATTACK_RETREAT", "Remaining movement is used to retreat")
+
+    do attacker.%Reload()
+    do nearTarget.%Reload()
+    do farTarget.%Reload()
+    do $$$AssertEquals(attacker.CurrentProjectiles, projectilesBefore - 1, "The AI attack consumes one projectile")
+    do $$$AssertTrue(attacker.PositionY < combat.attackFrom.y, "The projectile unit withdraws away from its target")
+    do $$$AssertEquals(nearTarget.CurrentStrength, targetStrengthBefore - combat.defenderCasualties, "AI casualties are persisted on the closest target")
+    do $$$AssertEquals(nearTarget.Morale, 100 - combat.defenderCasualties, "AI ranged casualties reduce target morale")
+    set responseTargetMorale = ""
+    for armyIndex = 0:1:(result.data.battle.armies.%Size() - 1) {
+        set responseArmy = result.data.battle.armies.%Get(armyIndex)
+        for responseUnitIndex = 0:1:(responseArmy.units.%Size() - 1) {
+            set responseUnit = responseArmy.units.%Get(responseUnitIndex)
+            if responseUnit.id = nearTarget.%Id() set responseTargetMorale = responseUnit.morale
+        }
+    }
+    do $$$AssertEquals(responseTargetMorale, nearTarget.Morale, "The next-turn response includes updated morale without requiring a reload")
+    do $$$AssertEquals(farTarget.CurrentStrength, farTarget.UnitProfile.InitialStrength, "The farther target is not attacked")
+    &sql(SELECT COUNT(*) INTO :aiCombatEvents FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'AI_COMBAT_PHASE')
+    do $$$AssertEquals(aiCombatEvents, 1, "The AI combat phase is recorded")
+}
+
+Method Test08AIAdjacentMeleeCombat()
+{
+    set battleJSON = ..CreateBattle("AI adjacent melee combat test"), battleId = battleJSON.id
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
+    do $$$AssertStatusOK(sc, "AI melee battle can be opened")
+    set battle.Status = "IN_PROGRESS", battle.Phase = "MOVEMENT", battle.CurrentRound = 1
+    set sc = battle.%Save()
+    do $$$AssertStatusOK(sc, "AI melee fixture can be started")
+
+    set defender = ##class(BronzeWars.Model.BattleUnit).%OpenId(battleJSON.armies.%Get(0).units.%Get(0).id)
+    set defender.PositionX = 5, defender.PositionY = 5, defender.IsDeployed = 1, defender.HasMoved = 1, defender.Morale = 80
+    set sc = defender.%Save()
+    do $$$AssertStatusOK(sc, "The adjacent human defender can be prepared")
+
+    set aiArmy = ..FindArmy(battleId, "AI")
+    set attackerType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_INFANTRY")
+    set attackerProfile = ##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(attackerType.%Id(), aiArmy.Faction)
+    set attacker = ##class(BronzeWars.Model.BattleUnit).%New(attackerType, attackerProfile)
+    set attacker.Battle = battle, attacker.Army = aiArmy, attacker.Name = "AI melee attacker"
+    set attacker.PositionX = 5, attacker.PositionY = 4, attacker.IsDeployed = 1, attacker.Morale = 80
+    set sc = attacker.%Save()
+    do $$$AssertStatusOK(sc, "The adjacent AI attacker can be prepared")
+    set attackerStrengthBefore = attacker.CurrentStrength, defenderStrengthBefore = defender.CurrentStrength
+
+    set result = ##class(BronzeWars.Interop.Client).NextTurn(battleId, 1)
+    do $$$AssertTrue(result.ok, "An adjacent AI unit executes its combat phase")
+    do $$$AssertEquals(result.data.aiCombatTrace.%Size(), 1, "The stationary adjacent attacker produces a combat trace")
+    set combat = result.data.aiCombatTrace.%Get(0)
+    do $$$AssertEquals(combat.type, "MELEE", "An adjacent AI attack is resolved as melee")
+    do $$$AssertTrue(combat.attackerCasualties > 0, "The AI attacker receives defender retaliation casualties")
+    do $$$AssertTrue(combat.defenderCasualties > 0, "The human defender receives attacker casualties")
+
+    do attacker.%Reload()
+    do defender.%Reload()
+    do $$$AssertEquals(attacker.CurrentStrength, attackerStrengthBefore - combat.attackerCasualties, "AI attacker casualties are persisted")
+    do $$$AssertEquals(defender.CurrentStrength, defenderStrengthBefore - combat.defenderCasualties, "Human defender casualties are persisted")
+    do $$$AssertEquals(attacker.Morale, 80 - combat.attackerCasualties, "AI attacker casualties reduce its morale")
+    do $$$AssertEquals(defender.Morale, 80 - combat.defenderCasualties, "Human defender casualties reduce its morale")
+}
+
 Method CreateBattle(name As %String) As %DynamicObject
 {
     set result = ##class(BronzeWars.Interop.Client).CreateBattle({"name":(name)})

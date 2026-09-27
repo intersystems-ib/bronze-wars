@@ -9,16 +9,31 @@ export function isPositionInAttackRange(origin, target, range) {
   return deltaX + deltaY <= normalizedRange;
 }
 
+export function canUnitAttackPosition(unit, targetPosition) {
+  if (!unit?.position || !targetPosition) return false;
+  if (!isPositionInAttackRange(unit.position, targetPosition, unit.type?.attackRange)) return false;
+
+  const deltaX = Math.abs(Number(targetPosition.x) - Number(unit.position.x));
+  const deltaY = Math.abs(Number(targetPosition.y) - Number(unit.position.y));
+  const orthogonallyAdjacent = deltaX + deltaY === 1;
+  if (orthogonallyAdjacent) return true;
+
+  return Number(unit.type?.initialProjectiles) > 0 && Number(unit.projectiles) > 0;
+}
+
+export function hasUnitAttacked(unit) {
+  return unit?.hasAttacked === true || Number(unit?.hasAttacked) === 1;
+}
+
 export function getAttackTargetIds(selectedUnit, armies) {
   const targets = new Set();
-  if (!selectedUnit?.position || selectedUnit.side !== 'HUMAN' || selectedUnit.active === false) return targets;
+  if (!selectedUnit?.position || selectedUnit.side !== 'HUMAN' || selectedUnit.active === false || Number(selectedUnit.active) === 0 || hasUnitAttacked(selectedUnit)) return targets;
 
-  const attackRange = selectedUnit.type?.attackRange;
   armies.forEach((army) => {
     if (army.side === selectedUnit.side) return;
     army.units.forEach((unit) => {
       if (unit.active === false || !unit.position) return;
-      if (isPositionInAttackRange(selectedUnit.position, unit.position, attackRange)) {
+      if (canUnitAttackPosition(selectedUnit, unit.position)) {
         targets.add(String(unit.id));
       }
     });

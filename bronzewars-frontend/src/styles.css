@@ -307,7 +307,7 @@ h3 { margin-bottom: 0.35rem; color: #e9d8bd; font-size: 0.95rem; }
 .enemy-deployment-modal { display: grid; justify-items: center; width: min(390px, 100%); padding: 2rem; text-align: center; }
 .enemy-deployment-modal strong { margin-top: 1rem; color: #f0d5a9; font-family: Georgia, serif; font-size: 1.15rem; }
 .enemy-deployment-modal > span:last-child { margin-top: 0.45rem; color: var(--muted); font-size: 0.72rem; }
-.enemy-deployment-spinner { width: 2.4rem; height: 2.4rem; border: 3px solid rgba(224, 181, 112, 0.2); border-top-color: var(--bronze); border-radius: 50%; animation: spin 750ms linear infinite; }
+.enemy-deployment-spinner { display: grid; width: 3rem; height: 3rem; place-items: center; color: var(--bronze); font-family: "Segoe UI Historic", "Noto Sans Egyptian Hieroglyphs", sans-serif; font-size: 2.35rem; line-height: 1; text-shadow: 0 0 18px rgba(224, 181, 112, 0.38); }
 
 .encounter-overlay { position: fixed; inset: 0; z-index: 110; display: grid; overflow-y: auto; place-items: center; padding: 1rem; background: rgba(7, 5, 3, 0.86); backdrop-filter: blur(6px); }
 .encounter-modal { width: min(850px, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; border-color: rgba(211, 91, 72, 0.48); padding: clamp(1rem, 3vw, 1.7rem); box-shadow: 0 30px 90px rgba(0, 0, 0, 0.62), 0 0 35px rgba(151, 47, 35, 0.15); }
@@ -321,8 +321,10 @@ h3 { margin-bottom: 0.35rem; color: #e9d8bd; font-size: 0.95rem; }
 .encounter-combatant { min-width: 0; border: 1px solid rgba(216, 163, 94, 0.2); padding: 0.8rem; background: rgba(15, 12, 9, 0.72); }
 .encounter-combatant.side-ai { border-color: rgba(211, 91, 72, 0.38); }
 .encounter-combatant h3 { overflow: hidden; margin-bottom: 0.65rem; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
-.encounter-combatant__art { aspect-ratio: 3 / 2; overflow: hidden; border: 1px solid var(--bronze-dark); background: #21180f; }
+.encounter-combatant__art { position: relative; isolation: isolate; aspect-ratio: 3 / 2; overflow: hidden; border: 1px solid var(--bronze-dark); background: #21180f; }
+.encounter-combatant__art .unit-artwork { position: relative; z-index: 0; }
 .encounter-combatant.side-ai .encounter-combatant__art { border-color: rgba(183, 76, 61, 0.76); }
+.encounter-combatant__damage { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; opacity: 1; color: #ff3025; background: radial-gradient(circle, rgba(36, 0, 0, 0.46) 0, rgba(36, 0, 0, 0) 58%); font-family: Inter, system-ui, sans-serif; font-size: clamp(3rem, 8vw, 5.8rem); font-weight: 900; line-height: 1; pointer-events: none; -webkit-text-stroke: 1px rgba(73, 0, 0, 0.9); text-shadow: 0 4px 6px #000, 0 0 12px #000, 0 0 28px rgba(255, 38, 26, 0.95); animation: encounter-damage 3s ease-out forwards; }
 .encounter-combatant__primary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin: 0.65rem 0; }
 .encounter-combatant__primary-stats div { display: flex; gap: 0.35rem; align-items: center; justify-content: center; border: 1px solid currentColor; padding: 0.35rem; background: rgba(0, 0, 0, 0.2); }
 .encounter-combatant__primary-stats dt { font-family: "Segoe UI Historic", "Noto Sans Egyptian Hieroglyphs", sans-serif; font-size: 1rem; }
@@ -336,6 +338,7 @@ h3 { margin-bottom: 0.35rem; color: #e9d8bd; font-size: 0.95rem; }
 .encounter-combatant__details dd { margin: 0.15rem 0 0; color: #f0dfc3; font-size: 0.76rem; font-weight: 700; }
 .encounter-modal__footer { display: flex; gap: 1rem; align-items: center; justify-content: space-between; margin-top: 1.2rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .encounter-modal__footer span { color: var(--muted); font-size: 0.68rem; }
+.encounter-modal__footer.is-result { visibility: hidden; }
 
 .unit-inspector { align-self: start; padding: 1.1rem; }
 .unit-inspector h2 { margin: 0.25rem 0 0.9rem; color: #eadbc3; font-size: 1.15rem; }
@@ -364,6 +367,16 @@ footer { padding: 1rem; color: #716758; font-size: 0.62rem; text-align: center; 
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes enemy-unit-moving { from { filter: brightness(1); } to { filter: brightness(1.28); } }
+@keyframes encounter-damage {
+  0% { opacity: 1; transform: scale(0.78) translateY(0); }
+  12%, 75% { opacity: 1; transform: scale(1) translateY(-0.15rem); }
+  100% { opacity: 0; transform: scale(1.22) translateY(-2.2rem); }
+}
+
+@keyframes encounter-damage-reduced {
+  0%, 75% { opacity: 1; }
+  100% { opacity: 0; }
+}
 
 @media (max-width: 980px) {
   .unit-codex { max-height: none; }
@@ -403,4 +416,5 @@ footer { padding: 1rem; color: #716758; font-size: 0.62rem; text-align: center; 
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .encounter-combatant__damage { animation-name: encounter-damage-reduced; animation-duration: 3s !important; }
 }

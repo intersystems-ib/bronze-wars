@@ -37,6 +37,9 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(position),
   }),
+  attackUnit: (battleId, unitId, targetUnitId) => request(`/battles/${battleId}/units/${unitId}/attack/${targetUnitId}`, {
+    method: 'POST',
+  }),
   startBattle: (battleId) => request(`/battles/${battleId}/start`, { method: 'POST' }),
   nextTurn: (battleId, confirmIncomplete = false) => request(`/battles/${battleId}/next-turn`, {
     method: 'POST',

@@ -46,6 +46,9 @@ export default function UnitInspector({ unit, army }) {
         <div><dt>{t('battle.morale')}</dt><dd>{morale}</dd></div>
         <div><dt>{t('battle.range')}</dt><dd>{unit.type.attackRange}</dd></div>
         <div><dt>{t('battle.damage')}</dt><dd>{unit.type.damage}</dd></div>
+        {Number(unit.type.initialProjectiles) > 0 && (
+          <div><dt>{t('battle.projectiles')}</dt><dd>{unit.projectiles} / {unit.type.initialProjectiles}</dd></div>
+        )}
       </dl>
 
       <div className="morale-meter" aria-label={t('battle.moraleValue', { value: morale })}>

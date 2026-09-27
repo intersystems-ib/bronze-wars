@@ -9,6 +9,29 @@ import { DEFAULT_ARMY_DESIGN_ID, getArmyDesign, getArmyDesignForFaction } from '
 import { useI18n } from './i18n/I18nContext';
 
 const BATTLE_DESIGN_STORAGE_PREFIX = 'bronzewars.battle-design.';
+const ENEMY_DEPLOYMENT_GLYPHS = [
+  '\u{1306D}', '\u{13073}', '\u{13079}', '\u{13080}',
+  '\u{13093}', '\u{13099}', '\u{1309C}', '\u{130A7}',
+  '\u{130BB}', '\u{130C2}', '\u{13102}', '\u{13114}',
+];
+
+function EnemyDeploymentSpinner() {
+  const [glyphIndex, setGlyphIndex] = useState(0);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setGlyphIndex((currentIndex) => (currentIndex + 1) % ENEMY_DEPLOYMENT_GLYPHS.length);
+    }, 500);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  return (
+    <span className="enemy-deployment-spinner" aria-hidden="true">
+      {ENEMY_DEPLOYMENT_GLYPHS[glyphIndex]}
+    </span>
+  );
+}
 
 function storedArmyDesign(battleId) {
   try {
@@ -42,6 +65,81 @@ function moveBattleUnit(battleState, unitId, position) {
   };
 }
 
+function updateBattleUnit(battleState, unitId, changes) {
+  return {
+    ...battleState,
+    armies: battleState.armies.map((army) => ({
+      ...army,
+      units: army.units.map((unit) => (
+        String(unit.id) === String(unitId) ? { ...unit, ...changes } : unit
+      )),
+    })),
+  };
+}
+
+function stageAIMovementTrace(finalBattle, movementTrace) {
+  const stagedUnits = new Set();
+  return movementTrace.reduce((stagedBattle, movement) => {
+    const unitId = String(movement.unitId);
+    if (!movement.from || stagedUnits.has(unitId)) return stagedBattle;
+    stagedUnits.add(unitId);
+    return moveBattleUnit(stagedBattle, movement.unitId, movement.from);
+  }, finalBattle);
+}
+
+function stageAICombatTrace(finalBattle, combatTrace) {
+  const stagedAttackers = new Set();
+  const stagedDefenders = new Set();
+  return combatTrace.reduce((stagedBattle, combat) => {
+    let nextBattle = stagedBattle;
+    const attackerId = String(combat.attackerUnitId);
+    const defenderId = String(combat.defenderUnitId);
+    if (!stagedAttackers.has(attackerId)) {
+      stagedAttackers.add(attackerId);
+      nextBattle = updateBattleUnit(nextBattle, combat.attackerUnitId, {
+        active: true,
+        isDeployed: true,
+        currentStrength: combat.attackerStrengthBefore,
+        morale: combat.attackerMoraleBefore,
+        projectiles: combat.projectilesBefore,
+      });
+    }
+    if (!stagedDefenders.has(defenderId)) {
+      stagedDefenders.add(defenderId);
+      nextBattle = updateBattleUnit(nextBattle, combat.defenderUnitId, {
+        active: true,
+        isDeployed: true,
+        currentStrength: combat.defenderStrengthBefore,
+        morale: combat.defenderMoraleBefore,
+        position: combat.defenderPosition,
+      });
+    }
+    return nextBattle;
+  }, finalBattle);
+}
+
+function applyAICombatResult(battleState, combat) {
+  const attackerChanges = {
+    active: !combat.attackerDestroyed,
+    isDeployed: !combat.attackerDestroyed,
+    currentStrength: combat.attackerStrengthAfter,
+    morale: combat.attackerMoraleAfter,
+    projectiles: combat.projectilesAfter,
+  };
+  if (combat.attackerDestroyed) attackerChanges.position = null;
+  else if (combat.attackerRetreat?.moved) attackerChanges.position = combat.attackerRetreat.to;
+  let nextBattle = updateBattleUnit(battleState, combat.attackerUnitId, attackerChanges);
+  const retreatPosition = combat.defenderRetreat?.moved ? combat.defenderRetreat.to : combat.defenderPosition;
+  nextBattle = updateBattleUnit(nextBattle, combat.defenderUnitId, {
+    active: !combat.defenderDestroyed,
+    isDeployed: !combat.defenderDestroyed,
+    currentStrength: combat.defenderStrengthAfter,
+    morale: combat.defenderMoraleAfter,
+    position: combat.defenderDestroyed ? null : retreatPosition,
+  });
+  return nextBattle;
+}
+
 export default function App() {
   const { t } = useI18n();
   const [unitTypes, setUnitTypes] = useState([]);
@@ -57,6 +155,7 @@ export default function App() {
   const [turnConfirmation, setTurnConfirmation] = useState(null);
   const [deployingEnemy, setDeployingEnemy] = useState(false);
   const [animatingUnitId, setAnimatingUnitId] = useState(null);
+  const [automaticEncounter, setAutomaticEncounter] = useState(null);
 
   const showError = useCallback((caughtError) => {
     setError({
@@ -135,19 +234,68 @@ export default function App() {
     });
   }
 
+  async function attackUnit(unitId, targetUnitId) {
+    if (!battle || !unitId || !targetUnitId) return null;
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = await api.attackUnit(battle.id, unitId, targetUnitId);
+      setBattle(payload.battle);
+      return payload.combat;
+    } catch (caughtError) {
+      showError(caughtError);
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function advanceTurn(confirmIncomplete = false) {
     if (!battle) return;
     setBusy(true);
     setError(null);
+    if (confirmIncomplete) setTurnConfirmation(null);
     try {
       const payload = await api.nextTurn(battle.id, confirmIncomplete);
+      const movementTrace = payload.aiMovementTrace || [];
+      const combatTrace = payload.aiCombatTrace || [];
+      const approachTrace = movementTrace.filter((movement) => movement.phase !== 'POST_ATTACK_RETREAT');
+      const retreatTrace = movementTrace.filter((movement) => movement.phase === 'POST_ATTACK_RETREAT');
       setTurnConfirmation(null);
-      for (const movement of payload.aiMovementTrace || []) {
+      if (movementTrace.length > 0 || combatTrace.length > 0) {
+        setBattle(stageAICombatTrace(stageAIMovementTrace(payload.battle, movementTrace), combatTrace));
+        await wait(100);
+      }
+      const animateMovement = async (movement) => {
         setAnimatingUnitId(movement.unitId);
         for (const position of movement.path || []) {
           setBattle((currentBattle) => moveBattleUnit(currentBattle, movement.unitId, position));
           await wait(320);
         }
+      };
+      const resolvedCombats = new Set();
+      const showAutomaticCombat = async (combat, combatIndex) => {
+        resolvedCombats.add(combatIndex);
+        setAnimatingUnitId(null);
+        setBattle((currentBattle) => applyAICombatResult(currentBattle, combat));
+        setAutomaticEncounter(combat);
+        await wait(4000);
+        setAutomaticEncounter(null);
+        for (const movement of retreatTrace.filter((candidate) => String(candidate.unitId) === String(combat.attackerUnitId))) {
+          await animateMovement(movement);
+        }
+      };
+      for (const movement of approachTrace) {
+        await animateMovement(movement);
+        for (let combatIndex = 0; combatIndex < combatTrace.length; combatIndex += 1) {
+          const combat = combatTrace[combatIndex];
+          if (String(combat.attackerUnitId) === String(movement.unitId)) {
+            await showAutomaticCombat(combat, combatIndex);
+          }
+        }
+      }
+      for (let combatIndex = 0; combatIndex < combatTrace.length; combatIndex += 1) {
+        if (!resolvedCombats.has(combatIndex)) await showAutomaticCombat(combatTrace[combatIndex], combatIndex);
       }
       setBattle(payload.battle);
     } catch (caughtError) {
@@ -158,6 +306,7 @@ export default function App() {
       }
     } finally {
       setAnimatingUnitId(null);
+      setAutomaticEncounter(null);
       setBusy(false);
     }
   }
@@ -188,6 +337,7 @@ export default function App() {
     setTurnConfirmation(null);
     setDeployingEnemy(false);
     setAnimatingUnitId(null);
+    setAutomaticEncounter(null);
     setStartView('create');
   }
 
@@ -215,7 +365,7 @@ export default function App() {
           {deployingEnemy && (
             <div className="enemy-deployment-overlay" role="dialog" aria-modal="true" aria-labelledby="enemy-deployment-title">
               <div className="enemy-deployment-modal panel">
-                <span className="enemy-deployment-spinner" aria-hidden="true" />
+                <EnemyDeploymentSpinner />
                 <strong id="enemy-deployment-title">{t('battle.enemyFormationDeploying')}</strong>
                 <span>{t('battle.enemyFormationDeployingDetail')}</span>
               </div>
@@ -227,15 +377,18 @@ export default function App() {
             deployment={deployment}
             selectedUnitId={selectedUnitId}
             animatingUnitId={animatingUnitId}
+            automaticEncounter={automaticEncounter}
             busy={busy}
             onSelectUnit={(unit) => setSelectedUnitId(unit?.id || null)}
             onPlaceUnit={placeUnit}
             onMoveUnit={moveUnit}
+            onAttackUnit={attackUnit}
             onStart={startBattle}
             onNextTurn={() => advanceTurn(false)}
             turnConfirmation={turnConfirmation}
             onConfirmNextTurn={() => advanceTurn(true)}
             onCancelNextTurn={() => setTurnConfirmation(null)}
+            onAutomaticEncounterClose={() => setAutomaticEncounter(null)}
             onExit={leaveBattle}
           />
           <footer>BronzeWars · InterSystems IRIS</footer>
