@@ -19,7 +19,7 @@ Method OnRequest(request As BronzeWars.Message.Request, Output response As Bronz
         if (payload.boardWidth < 1) ! (payload.boardHeight < 1) return ..SetError(.response, 422, "INVALID_BOARD_SIZE", "Las dimensiones del tablero deben ser positivas.")
         if (payload.boardWidth * 3) < 4 return ..SetError(.response, 422, "BOARD_TOO_NARROW", "La zona de despliegue debe admitir al menos cuatro unidades para consumir el presupuesto de la IA.")
         if payload.boardHeight < 6 return ..SetError(.response, 422, "BOARD_TOO_SHORT", "El tablero debe tener al menos seis filas.")
-        if 'payload.%IsDefined("units") do payload.%Set("units", ##class(BronzeWars.Rules.ArmyBudget).DefaultComposition())
+        if 'payload.%IsDefined("units") do payload.%Set("units", ##class(BronzeWars.Rules.ArmyBudget).DefaultComposition(payload.faction))
         if payload.%GetTypeOf("units") '= "array" return ..SetError(.response, 422, "INVALID_ARMY_COMPOSITION", "La composicion del ejercito debe ser una lista.")
 
         set normalized = ##class(%DynamicArray).%New(), grain = 0, unitCount = 0
@@ -31,7 +31,7 @@ Method OnRequest(request As BronzeWars.Message.Request, Output response As Bronz
             if (item.%GetTypeOf("code") '= "string") ! (item.%GetTypeOf("quantity") '= "number") return ..SetError(.response, 422, "INVALID_ARMY_COMPOSITION", "El codigo y la cantidad de cada unidad no son validos.")
             set code = $zconvert(item.code, "U"), quantity = item.quantity
             if (quantity < 0) ! (quantity '= (quantity \ 1)) return ..SetError(.response, 422, "INVALID_UNIT_QUANTITY", "Las cantidades de unidades deben ser enteros no negativos.")
-            set cost = ##class(BronzeWars.Rules.ArmyBudget).GrainCost(code)
+            set cost = ##class(BronzeWars.Rules.ArmyBudget).GrainCost(code, payload.faction)
             if cost = 0 return ..SetError(.response, 422, "UNKNOWN_UNIT_TYPE", "La composicion contiene un tipo de unidad desconocido.")
             if $data(seen(code)) return ..SetError(.response, 422, "DUPLICATE_UNIT_TYPE", "Cada tipo de unidad debe aparecer una sola vez en la composicion.")
             set seen(code) = 1
@@ -110,12 +110,41 @@ Method AdvanceTurnWithCommander(request As BronzeWars.Message.Request, Output re
         set response = contextResponse
         return $$$OK
     }
-    set context = contextResult.data, source = "DETERMINISTIC", reasoning = "Movimiento tactico basado en cohesion, alcance y flancos."
-    set sc = ##class(BronzeWars.AI.DeterministicMovementGenerator).Generate(context, .movements)
+    set context = contextResult.data
+    set strategy = context.battleSituation.recommendedStrategy
+    set source = "DETERMINISTIC_FALLBACK", decisionDiagnostic = ""
+    set reasoning = "La estrategia se ha aplicado directamente desde el estado general de la batalla."
+
+    set decisionRequest = ##class(BronzeWars.Message.Request).%New()
+    set decisionRequest.Action = "PLAN_AI_MOVEMENT"
+    set decisionRequest.PayloadJSON = ##class(BronzeWars.AI.MovementCommander).BuildDecisionRequest(context).%ToJSON()
+    set decisionStatus = ..SendRequestSync("LLM Operation", decisionRequest, .decisionResponse)
+    if $SYSTEM.Status.IsOK(decisionStatus), $isobject(decisionResponse) {
+        set decisionResult = decisionResponse.Result()
+        if decisionResult.ok {
+            set validation = ##class(BronzeWars.AI.MovementCommander).ParseDecision(decisionResult.data.content, strategy, .llmStrategy, .llmReasoning)
+            if $SYSTEM.Status.IsOK(validation) set strategy = llmStrategy, source = "LLM_TOOLSET", reasoning = llmReasoning
+            if $SYSTEM.Status.IsError(validation) $$$LOGWARNING("Invalid LLM movement decision; using battle-situation fallback: " _ $SYSTEM.Status.GetErrorText(validation) _ " Content: " _ decisionResult.data.content)
+        }
+        if 'decisionResult.ok {
+            set decisionDiagnostic = decisionResult.code _ " - " _ decisionResult.message
+            $$$LOGWARNING("LLM movement decision failed; using battle-situation fallback: " _ decisionDiagnostic)
+        }
+    }
+    if $SYSTEM.Status.IsError(decisionStatus) {
+        set decisionDiagnostic = $SYSTEM.Status.GetErrorText(decisionStatus)
+        $$$LOGWARNING("Unable to request the LLM movement decision; using battle-situation fallback: " _ decisionDiagnostic)
+    }
+    if strategy = "REGROUP" set reasoning = $select(source="LLM_TOOLSET":reasoning, 1:"Moral media inferior a 50 y bajas iguales o superiores al 50%; el ejercito se reagrupa.")
+    if strategy = "ADVANCE" set reasoning = $select(source="LLM_TOOLSET":reasoning, 1:"Moral media superior a 50 y bajas inferiores al 50%; todo el ejercito avanza.")
+    if strategy = "TACTICAL" set reasoning = $select(source="LLM_TOOLSET":reasoning, 1:"El estado no cumple simultaneamente los umbrales de avance o reagrupamiento; se mantiene la doctrina tactica.")
+    if decisionDiagnostic '= "" set reasoning = reasoning _ " Diagnostico LLM: " _ decisionDiagnostic
+
+    set sc = ##class(BronzeWars.AI.DeterministicMovementGenerator).Generate(context, .movements, strategy)
     if $SYSTEM.Status.IsError(sc) return ..SetError(.response, 500, "AI_MOVEMENT_FAILED", "No se ha podido generar el movimiento de la IA.")
     do payload.%Set("aiMovements", movements)
     do payload.%Set("movementSource", source)
-    do payload.%Set("movementReasoning", reasoning)
+    do payload.%Set("movementReasoning", strategy _ ": " _ reasoning)
     set request.PayloadJSON = payload.%ToJSON()
     return ..SendToOperation(request, .response)
 }
@@ -137,7 +166,7 @@ Method StartWithCommander(request As BronzeWars.Message.Request, Output response
 
     set compositionSource = "DETERMINISTIC_FALLBACK", compositionReasoning = "Se ha elegido una composicion de respaldo acorde con el tipo de comandante y que consume las 100 medidas de grano."
     set targetLineLength = ##class(BronzeWars.AI.ArmyCommander).TargetLineLength(planningContext)
-    set composition = ##class(BronzeWars.AI.Commanders.Strategy).FallbackComposition(planningContext.commanderType, planningContext.board.width * 3, targetLineLength)
+    set composition = ##class(BronzeWars.AI.Commanders.Strategy).FallbackComposition(planningContext.commanderType, ##class(BronzeWars.AI.ArmyCommander).MaxUnits(planningContext), targetLineLength, planningContext.aiFaction)
     set armyRequest = ##class(BronzeWars.Message.Request).%New()
     set armyRequest.Action = "PLAN_AI_ARMY"
     set armyRequest.PayloadJSON = ##class(BronzeWars.AI.ArmyCommander).BuildRequest(planningContext).%ToJSON()
@@ -182,7 +211,7 @@ Method StartWithCommander(request As BronzeWars.Message.Request, Output response
             $$$LOGERROR("Deterministic AI deployment failed for battle " _ payload.battleId _ ": " _ $SYSTEM.Status.GetErrorText(sc))
             return ..SetError(.response, 500, "AI_DEPLOYMENT_FAILED", "No se ha podido generar el despliegue de la IA.")
         }
-        set reasoning = "El despliegue de respaldo iguala o supera las " _ context.humanFormation.frontage _ " columnas del frente humano, mantiene una linea principal apoyada y reserva la retaguardia para los arqueros."
+        set reasoning = "El despliegue de respaldo cubre el frente humano, adelanta infanteria ligera, arqueros y carros, mantiene infanteria pesada y lanceros en segunda linea y protege las alas con caballeria."
     }
 
     do payload.%Set("placements", proposal)

@@ -102,12 +102,8 @@ Method Test03StartAndRollback()
     do $$$AssertEquals(started.data.battle.currentRound, 1, "Started round is one")
 
     set humanArmyId = human.id
-    &sql(SELECT u.Morale INTO :leftMorale FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID WHERE u.Army = :humanArmyId AND u.PositionX = 0 AND t.Code IN ('SPEARMEN','HEAVY_INFANTRY','LIGHT_INFANTRY','MERCENARIES'))
-    &sql(SELECT u.Morale INTO :interiorMorale FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID WHERE u.Army = :humanArmyId AND u.PositionX = 1 AND t.Code IN ('SPEARMEN','HEAVY_INFANTRY','LIGHT_INFANTRY','MERCENARIES'))
-    &sql(SELECT TOP 1 u.Morale INTO :cavalryMorale FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID WHERE u.Army = :humanArmyId AND t.Code IN ('LIGHT_CAVALRY','HEAVY_CAVALRY'))
-    do $$$AssertEquals(leftMorale, 80, "Infantry at the end of a continuous human line starts with 80 morale")
-    do $$$AssertEquals(interiorMorale, 90, "Infantry supported on both sides starts with 90 morale")
-    do $$$AssertEquals(cavalryMorale, 100, "Cavalry keeps its initial morale")
+    &sql(SELECT COUNT(*) INTO :initialMoraleErrors FROM BronzeWars_Model.BattleUnit WHERE Battle = :battleId AND Active = 1 AND IsDeployed = 1 AND Morale <> 100)
+    do $$$AssertEquals(initialMoraleErrors, 0, "Every deployed unit starts the battle with 100 morale")
 
     set aiArmy = ..FindArmy(battleId, "AI"), aiArmyId = aiArmy.%Id()
     do $$$AssertTrue(##class(BronzeWars.AI.Commanders.Strategy).IsValid(aiArmy.CommanderType), "Battle start selects and persists a valid random AI commander")
@@ -116,7 +112,7 @@ Method Test03StartAndRollback()
     &sql(SELECT COUNT(*), MIN(u.PositionX), MAX(u.PositionX) INTO :aiLineCount, :aiLineMin, :aiLineMax FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID WHERE u.Army = :aiArmyId AND u.PositionY = 1 AND t.Code IN ('SPEARMEN','HEAVY_INFANTRY','MERCENARIES'))
     &sql(SELECT MIN(PositionX), MAX(PositionX) INTO :aiFormationMin, :aiFormationMax FROM BronzeWars_Model.BattleUnit WHERE Army = :aiArmyId AND Active = 1 AND IsDeployed = 1)
     &sql(SELECT COUNT(*) INTO :mobileFlankUnits FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID WHERE u.Army = :aiArmyId AND u.PositionX IN (:aiFormationMin, :aiFormationMax) AND t.Code IN ('LIGHT_INFANTRY','LIGHT_CAVALRY','HEAVY_CAVALRY','CHARIOTS'))
-    &sql(SELECT COUNT(*) INTO :aiLineMoraleErrors FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID WHERE u.Army = :aiArmyId AND u.PositionY = 1 AND t.Code IN ('SPEARMEN','HEAVY_INFANTRY','MERCENARIES') AND u.Morale NOT IN (80,90))
+    &sql(SELECT COUNT(*) INTO :aiLineMoraleErrors FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID WHERE u.Army = :aiArmyId AND u.PositionY = 1 AND t.Code IN ('SPEARMEN','HEAVY_INFANTRY','MERCENARIES') AND u.Morale <> 100)
     set expectedLine = ##class(BronzeWars.AI.Commanders.Strategy).MainLineTarget(aiArmy.CommanderType, 10, 16)
     do $$$AssertTrue(aiLineCount >= expectedLine, "The AI infantry line follows its commander doctrine")
     if aiArmy.CommanderType = "FLANKER" {
@@ -124,7 +120,7 @@ Method Test03StartAndRollback()
         do $$$AssertEquals(mobileFlankUnits, 2, "A flanking commander places a mobile unit on both extremes")
     }
     do $$$AssertEquals(aiLineCount, aiLineMax - aiLineMin + 1, "The AI infantry line has no gaps")
-    do $$$AssertEquals(aiLineMoraleErrors, 0, "Every unit in the AI main line receives lateral-support morale")
+    do $$$AssertEquals(aiLineMoraleErrors, 0, "Every unit in the AI main line starts with full morale")
 
     set mobileUnitId = "", mobileUnitX = "", mobileUnitSpeed = 0
     for i = 0:1:(human.units.%Size() - 1) {
@@ -142,9 +138,12 @@ Method Test03StartAndRollback()
     set pendingTurn = ##class(BronzeWars.Interop.Client).NextTurn(battleId)
     do $$$AssertEquals(pendingTurn.code, "UNITS_PENDING_MOVEMENT", "Advancing warns when units have not moved")
     do $$$AssertEquals(pendingTurn.details.pendingUnits, human.units.%Size() - 1, "The warning reports pending human units")
+    &sql(SELECT COUNT(*) INTO :situationToolCallsBefore FROM BronzeWars_AI_Audit.ToolExecution WHERE ToolName = 'GetBattleSituation')
     set advancedTurn = ##class(BronzeWars.Interop.Client).NextTurn(battleId, 1)
     do $$$AssertTrue(advancedTurn.ok, "The turn can be advanced after confirmation")
     do $$$AssertEquals(advancedTurn.data.battle.currentRound, 2, "Advancing starts the next round")
+    &sql(SELECT COUNT(*) INTO :situationToolCallsAfter FROM BronzeWars_AI_Audit.ToolExecution WHERE ToolName = 'GetBattleSituation')
+    do $$$AssertTrue(situationToolCallsAfter > situationToolCallsBefore, "The movement agent invokes and audits GetBattleSituation during the turn decision")
     &sql(SELECT COUNT(*) INTO :aiMovementPlans FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'AI_MOVEMENT_PLANNED')
     &sql(SELECT COUNT(*) INTO :aiMovementEvents FROM BronzeWars_Model.BattleEvent e JOIN BronzeWars_Model.BattleUnit u ON e.ActorUnit = u.%ID JOIN BronzeWars_Model.Army a ON u.Army = a.%ID WHERE e.Battle = :battleId AND e.EventType = 'UNIT_MOVED' AND a.Side = 'AI')
     &sql(SELECT COUNT(DISTINCT u.PositionY), COUNT(*), MIN(u.PositionX), MAX(u.PositionX) INTO :aiLineRowsAfterMove, :aiLineCountAfterMove, :aiLineMinAfterMove, :aiLineMaxAfterMove FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID WHERE u.Army = :aiArmyId AND t.Code IN ('SPEARMEN','HEAVY_INFANTRY','MERCENARIES'))
@@ -172,12 +171,28 @@ Method Test03StartAndRollback()
     set resetUnit = ##class(BronzeWars.Model.BattleUnit).%OpenId(mobileUnitId)
     do $$$AssertEquals(resetUnit.HasMoved, 0, "The next round resets the moved indicator")
     do $$$AssertEquals(resetUnit.MovementSpent, 0, "The next round restores movement points")
+    set responseHumanArmy = ""
+    for responseArmyIndex = 0:1:(advancedTurn.data.battle.armies.%Size() - 1) {
+        set responseArmy = advancedTurn.data.battle.armies.%Get(responseArmyIndex)
+        if responseArmy.side = "HUMAN" set responseHumanArmy = responseArmy
+    }
+    do $$$AssertTrue($isobject(responseHumanArmy), "The next-turn response includes the human army")
+    if $isobject(responseHumanArmy) {
+        for responseUnitIndex = 0:1:(responseHumanArmy.units.%Size() - 1) {
+            set responseUnit = responseHumanArmy.units.%Get(responseUnitIndex)
+            continue:'responseUnit.active
+            do $$$AssertEquals(responseUnit.hasMoved, 0, "Every active human unit is immediately available after the AI turn")
+            do $$$AssertEquals(responseUnit.hasAttacked, 0, "Every active human unit recovers its attack in the response")
+            do $$$AssertEquals(responseUnit.movementSpent, 0, "Every active human unit has no movement spent in the response")
+            do $$$AssertEquals(responseUnit.remainingMovement, responseUnit.type.speed, "Every active human unit recovers its complete movement in the response")
+        }
+    }
 
     set aiArmy = ..FindArmy(battleId, "AI")
     do $$$AssertNotTrue(##class(BronzeWars.Rules.DeploymentValidator).HasDuplicatePositions(aiArmy), "The AI deployment has no duplicate positions")
     set aiArmyId = aiArmy.%Id()
     &sql(SELECT COUNT(*) INTO :aiUnitCount FROM BronzeWars_Model.BattleUnit WHERE Army = :aiArmyId AND Active = 1)
-    &sql(SELECT SUM(t.GrainCost) INTO :aiGrain FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID WHERE u.Army = :aiArmyId AND u.Active = 1)
+    &sql(SELECT SUM(COALESCE(p.GrainCost, t.GrainCost)) INTO :aiGrain FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.UnitType t ON u.UnitType = t.%ID LEFT JOIN BronzeWars_Model.UnitProfile p ON u.UnitProfile = p.%ID WHERE u.Army = :aiArmyId AND u.Active = 1)
     do $$$AssertTrue(aiUnitCount > 0, "The commander creates a non-empty AI army")
     do $$$AssertEquals(aiGrain, 100, "The AI commander spends the complete grain budget")
 
@@ -187,14 +202,12 @@ Method Test03StartAndRollback()
     &sql(SELECT COUNT(*) INTO :startedEvents FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'BATTLE_STARTED')
     &sql(SELECT COUNT(*) INTO :phaseEvents FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'PHASE_CHANGED')
     &sql(SELECT COUNT(*) INTO :plannedEvents FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'AI_DEPLOYMENT_PLANNED')
-    &sql(SELECT COUNT(*) INTO :moraleEvents FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'FORMATION_MORALE_CALCULATED')
     do $$$AssertEquals(deploymentEvents, human.units.%Size() + aiUnitCount, "Deployment events exist for all human and AI placements")
     do $$$AssertEquals(armySelectionEvents, 1, "The AI army selection is recorded once")
     do $$$AssertEquals(commanderSelectionEvents, 1, "The random AI commander selection is recorded once")
     do $$$AssertEquals(startedEvents, 1, "One BATTLE_STARTED event is recorded")
     do $$$AssertEquals(phaseEvents, 1, "One PHASE_CHANGED event is recorded")
     do $$$AssertEquals(plannedEvents, 1, "The AI deployment plan is recorded")
-    do $$$AssertEquals(moraleEvents, 1, "Formation morale is calculated once after deployment")
 }
 
 Method Test04ArmyCompositionBudget()
@@ -238,8 +251,8 @@ Method Test05AdjacentMeleeCombat()
     set defenderStats = defender.UnitType
     if $isobject(defender.UnitProfile) set defenderStats = defender.UnitProfile
     set expected = ##class(BronzeWars.Rules.Combat).Resolve({
-        "attacker":{"strength":(attacker.CurrentStrength),"morale":(attacker.Morale),"attack":(attackerStats.Attack),"defense":(attackerStats.Defense),"damage":(attackerStats.Damage)},
-        "defender":{"strength":(defender.CurrentStrength),"morale":(defender.Morale),"attack":(defenderStats.Attack),"defense":(defenderStats.Defense),"damage":(defenderStats.Damage)}
+        "attacker":{"code":(attacker.UnitType.Code),"side":(attacker.Army.Side),"x":(attacker.PositionX),"y":(attacker.PositionY),"strength":(attacker.CurrentStrength),"morale":(attacker.Morale),"attack":(attackerStats.Attack),"attackModifier":(##class(BronzeWars.Model.UnitModifier).GetAttackModifier(attacker.UnitType, defender.UnitType)),"defense":(attackerStats.Defense),"damage":(attackerStats.Damage)},
+        "defender":{"code":(defender.UnitType.Code),"side":(defender.Army.Side),"x":(defender.PositionX),"y":(defender.PositionY),"strength":(defender.CurrentStrength),"morale":(defender.Morale),"attack":(defenderStats.Attack),"attackModifier":(##class(BronzeWars.Model.UnitModifier).GetAttackModifier(defender.UnitType, attacker.UnitType)),"defense":(defenderStats.Defense),"damage":(defenderStats.Damage)}
     })
     set attackerBefore = attacker.CurrentStrength, defenderBefore = defender.CurrentStrength
     set result = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, attacker.%Id(), defender.%Id())
@@ -291,6 +304,19 @@ Method Test05AdjacentMeleeCombat()
     do $$$AssertEquals(rangedAttacker.CurrentProjectiles, projectilesBefore - 1, "Remaining projectiles are persisted")
     do $$$AssertEquals(storedDefender.CurrentStrength, defenderBefore - rangedResult.data.combat.defenderCasualties, "Ranged casualties are persisted")
     do $$$AssertEquals(storedDefender.Morale, 100 - expected.defenderCasualties - rangedResult.data.combat.defenderCasualties, "Ranged casualties also reduce morale")
+
+    set attacker.HasAttacked = 0, attacker.PositionX = 4, attacker.PositionY = 4
+    set sc = attacker.%Save()
+    do $$$AssertStatusOK(sc, "The attacker can be prepared for a repeated flank attack")
+    set defenderMoraleBeforeFlank = storedDefender.Morale
+    set flankResult = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, attacker.%Id(), defender.%Id())
+    do $$$AssertTrue(flankResult.ok, "A flank attack can be resolved through the production")
+    do $$$AssertEquals(flankResult.data.combat.attackDirection, "FLANK", "The combat response identifies the flank attack")
+    do $$$AssertEquals(flankResult.data.combat.defenderPositionMoralePenalty, 10, "The combat response exposes the ten-point flank penalty")
+    do storedDefender.%Reload()
+    set expectedFlankMorale = defenderMoraleBeforeFlank - ##class(BronzeWars.Rules.Morale).LossForCasualties(storedDefender, flankResult.data.combat.defenderCasualties) - 10
+    if expectedFlankMorale < 0 set expectedFlankMorale = 0
+    do $$$AssertEquals(storedDefender.Morale, expectedFlankMorale, "Every flank attack removes ten additional morale points")
 }
 
 Method Test06LowMoraleUnitRetreatsAroundObstacles()

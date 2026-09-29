@@ -48,10 +48,14 @@ ClassMethod MovementInstruction(type As %String) As %String
 
 ClassMethod MainLineTarget(type As %String, humanFrontage As %Integer, boardWidth As %Integer) As %Integer
 {
-    if type = ..#DEFENSIVE set target = humanFrontage if target > 14 set target = 14
+    if type = ..#DEFENSIVE set target = humanFrontage if target > 12 set target = 12
     if type = ..#AGGRESSIVE set target = humanFrontage if target > 5 set target = 5
     if type = ..#SKIRMISHER set target = humanFrontage if target > 3 set target = 3
-    if type = ..#FLANKER set target = humanFrontage - 2 if target < 3 set target = 3
+    if type = ..#FLANKER {
+        set target = humanFrontage - 2
+        if target < 3 set target = 3
+        if target > 12 set target = 12
+    }
     if type = ..#BALANCED set target = humanFrontage if target > 8 set target = 8
     if '$data(target) set target = humanFrontage
     if target < 1 set target = 1
@@ -68,42 +72,38 @@ ClassMethod FrontageTarget(type As %String, humanFrontage As %Integer, boardWidt
     return target
 }
 
-ClassMethod FallbackComposition(type As %String, capacity As %Integer, targetFrontage As %Integer) As %DynamicArray
+ClassMethod FallbackComposition(type As %String, capacity As %Integer, targetFrontage As %Integer, faction As %String = "") As %DynamicArray
 {
-    if type = ..#DEFENSIVE, capacity >= 14 return [{"code":"SPEARMEN","quantity":8},{"code":"HEAVY_INFANTRY","quantity":4},{"code":"MERCENARIES","quantity":2}]
-    if type = ..#AGGRESSIVE, capacity >= 13 return [{"code":"SPEARMEN","quantity":5},{"code":"LIGHT_INFANTRY","quantity":6},{"code":"LIGHT_CAVALRY","quantity":2}]
-    if type = ..#SKIRMISHER, capacity >= 14 return [{"code":"SPEARMEN","quantity":3},{"code":"ARCHERS","quantity":6},{"code":"LIGHT_INFANTRY","quantity":4},{"code":"LIGHT_CAVALRY","quantity":1}]
-    if type = ..#FLANKER, targetFrontage > 8 {
-        set composition = ##class(BronzeWars.Rules.ArmyBudget).FormationFallback(capacity, targetFrontage)
-        set validation = ..ValidateComposition(type, composition)
-        if $SYSTEM.Status.IsOK(validation) return composition
-
-        // Some exact-grain solutions contain only two unit types. Asking for one
-        // additional line unit produces a varied, mobile army while still covering
-        // the requested frontage.
-        set composition = ##class(BronzeWars.Rules.ArmyBudget).FormationFallback(capacity, targetFrontage + 1)
-        set validation = ..ValidateComposition(type, composition)
-        if $SYSTEM.Status.IsOK(validation) return composition
-    }
-    if type = ..#FLANKER, capacity >= 11 return [{"code":"SPEARMEN","quantity":8},{"code":"ARCHERS","quantity":1},{"code":"LIGHT_CAVALRY","quantity":1},{"code":"CHARIOTS","quantity":1}]
-    if type = ..#BALANCED, capacity >= 10 return ##class(BronzeWars.Rules.ArmyBudget).DefaultComposition()
-    return ##class(BronzeWars.Rules.ArmyBudget).FormationFallback(capacity, targetFrontage)
+    set composition = ##class(BronzeWars.Rules.ArmyBudget).FormationFallback(capacity, targetFrontage, faction, type)
+    set validation = ..ValidateComposition(type, composition)
+    if $SYSTEM.Status.IsOK(validation) return composition
+    return ##class(BronzeWars.Rules.ArmyBudget).FormationFallback(capacity, targetFrontage + 1, faction, type)
 }
 
 ClassMethod ValidateComposition(type As %String, composition As %DynamicArray) As %Status
 {
-    set total = 0, preferred = 0, distinct = composition.%Size(), mobile = 0
+    set total = 0, preferred = 0, distinct = composition.%Size(), mobile = 0, preferredDistinct = 0, largest = 0
+    set hasArchers = 0, hasLightInfantry = 0, hasLightCavalry = 0
     for index = 0:1:(composition.%Size() - 1) {
         set selection = composition.%Get(index), code = selection.code, quantity = selection.quantity
         set total = total + quantity
-        if type = ..#DEFENSIVE, ((code = "SPEARMEN") ! (code = "HEAVY_INFANTRY")) set preferred = preferred + quantity
-        if type = ..#AGGRESSIVE, ((code = "LIGHT_INFANTRY") ! (code = "LIGHT_CAVALRY") ! (code = "HEAVY_CAVALRY") ! (code = "CHARIOTS")) set preferred = preferred + quantity
+        if quantity > largest set largest = quantity
+        if type = ..#DEFENSIVE, ((code = "SPEARMEN") ! (code = "HEAVY_INFANTRY")) set preferred = preferred + quantity, preferredDistinct = preferredDistinct + 1
+        if type = ..#AGGRESSIVE, ((code = "LIGHT_INFANTRY") ! (code = "LIGHT_CAVALRY") ! (code = "HEAVY_CAVALRY") ! (code = "CHARIOTS")) set preferred = preferred + quantity, preferredDistinct = preferredDistinct + 1
         if type = ..#SKIRMISHER, ((code = "ARCHERS") ! (code = "LIGHT_INFANTRY") ! (code = "LIGHT_CAVALRY")) set preferred = preferred + quantity
         if type = ..#FLANKER, ((code = "LIGHT_INFANTRY") ! (code = "LIGHT_CAVALRY") ! (code = "HEAVY_CAVALRY") ! (code = "CHARIOTS")) set mobile = mobile + quantity
+        if code = "ARCHERS" set hasArchers = 1
+        if code = "LIGHT_INFANTRY" set hasLightInfantry = 1
+        if code = "LIGHT_CAVALRY" set hasLightCavalry = 1
     }
+    if total > ##class(BronzeWars.Rules.ArmyBudget).#AIMaxUnits return $$$ERROR($$$GeneralError, "AI army cannot contain more than fourteen units")
+    if distinct < 3 return $$$ERROR($$$GeneralError, "AI army requires at least three different unit types")
+    if (largest * 2) > (total + 1) return $$$ERROR($$$GeneralError, "A single unit type cannot dominate the AI army")
     if (type = ..#DEFENSIVE) ! (type = ..#AGGRESSIVE) ! (type = ..#SKIRMISHER) {
         if (preferred * 2) < total return $$$ERROR($$$GeneralError, "AI composition does not reflect commander priorities")
     }
+    if ((type = ..#DEFENSIVE) ! (type = ..#AGGRESSIVE)), (preferredDistinct < 2) return $$$ERROR($$$GeneralError, "Commander composition requires at least two preferred unit types")
+    if type = ..#SKIRMISHER, ('hasArchers ! 'hasLightInfantry ! 'hasLightCavalry) return $$$ERROR($$$GeneralError, "Skirmisher commander requires archers, light infantry, and light cavalry")
     if type = ..#FLANKER, ((distinct < 3) ! (mobile < 2)) return $$$ERROR($$$GeneralError, "Flanking commander requires a varied army with at least two mobile flank units")
     return $$$OK
 }

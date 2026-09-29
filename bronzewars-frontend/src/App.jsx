@@ -12,7 +12,7 @@ const BATTLE_DESIGN_STORAGE_PREFIX = 'bronzewars.battle-design.';
 const ENEMY_DEPLOYMENT_GLYPHS = [
   '\u{1306D}', '\u{13073}', '\u{13079}', '\u{13080}',
   '\u{13093}', '\u{13099}', '\u{1309C}', '\u{130A7}',
-  '\u{130BB}', '\u{130C2}', '\u{13102}', '\u{13114}',
+  '\u{1321D}', '\u{130C2}', '\u{13102}', '\u{13114}',
 ];
 
 function EnemyDeploymentSpinner() {

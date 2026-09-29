@@ -11,7 +11,7 @@ XData Definition [ MimeType = application/xml ]
   </Policies>
 
   <Tool Name="GetBattleSituation" Class="BronzeWars.AI.Tools.BattleSituation" Method="GetBattleSituation">
-    <Description>Devuelve un resumen compacto del ejercito de la IA para la batalla indicada: moral media cualitativa y porcentaje de bajas sobre su fuerza inicial.</Description>
+    <Description>Consulta la base de datos y devuelve la moral media, el porcentaje de bajas sobre la fuerza inicial, el estado BAD/GOOD/NEUTRAL y la estrategia global recomendada para el ejercito de la IA.</Description>
   </Tool>
 </ToolSet>
 }

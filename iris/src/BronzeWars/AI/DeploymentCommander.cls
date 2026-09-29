@@ -3,26 +3,16 @@ Class BronzeWars.AI.DeploymentCommander Extends %RegisteredObject
 
 ClassMethod BuildRequest(context As %DynamicObject) As %DynamicObject
 {
-    set system = "Eres un comandante " _ context.commanderName _ " de la Edad del Bronce. Despliega todas las unidades y responde solo JSON compacto."
     set count = context.units.%Size()
-    set units = ##class(%DynamicArray).%New()
+    set unitIds = ##class(%DynamicArray).%New()
     for index = 0:1:(count - 1) {
         set unit = context.units.%Get(index)
-        set compactUnit = ##class(%DynamicArray).%New()
-        do compactUnit.%Push(+(unit.unitId))
-        do compactUnit.%Push(unit.code)
-        do units.%Push(compactUnit)
+        do unitIds.%Push(+(unit.unitId))
     }
-    set user = "Doctrina: " _ context.commanderDoctrine _ " Tablero ancho=" _ context.board.width _ ". Enemigo x=" _ context.humanFormation.minX _ ".." _ context.humanFormation.maxX _ ". Unidades [id,tipo]=" _ units.%ToJSON() _ ". Devuelve {placements:[[id,x,y],...]}, cada id una vez y sin repetir casillas. Filas validas y=0,1,2. Forma en y=1 una linea consecutiva de al menos " _ context.formationDoctrine.mainLineTarget _ " SPEARMEN, HEAVY_INFANTRY o MERCENARIES. ARCHERS en y=0; LIGHT_INFANTRY puede ir en y=2. Si eres flanqueador, supera el frente rival y usa unidades moviles en ambos extremos. No incluyas explicaciones."
-
-    set unitIds = ##class(%DynamicArray).%New()
-    for index = 0:1:(count - 1) do unitIds.%Push(+(context.units.%Get(index).unitId))
-    set placement = {"type":"array","prefixItems":[{"type":"integer","enum":(unitIds)},{"type":"integer","minimum":0,"maximum":(context.board.width-1)},{"type":"integer","minimum":0,"maximum":2}],"minItems":3,"maxItems":3}
-    set schema = {"type":"object","properties":{"placements":{"type":"array","minItems":(count),"maxItems":(count),"items":(placement)}},"required":["placements"],"additionalProperties":false}
-    set responseFormat = {"type":"json_schema","json_schema":{"name":"bronze_wars_deployment","strict":true,"schema":(schema)}}
-    set maxTokens = 60 + (count * 9)
-    if maxTokens > 240 set maxTokens = 240
-    return {"temperature":0.1,"max_tokens":(maxTokens),"response_format":(responseFormat),"messages":[{"role":"system","content":(system)},{"role":"user","content":(user)}]}
+    set goal = "Despliega las unidades " _ unitIds.%ToJSON() _ " de la batalla " _ context.battleId _ ". Consulta RecommendDeploymentPositions para cada unidad; la tool obtiene de la base de datos el tipo de comandante, el frente enemigo y las posiciones aliadas. Elige una opcion recomendada libre por unidad. Devuelve solo JSON compacto con {""placements"":[[id,x,y],...],""reasoning"":""...""}, sin omitir ni repetir unidades o casillas."
+    set maxIterations = (count * 2) + 4
+    if maxIterations > 32 set maxIterations = 32
+    return {"battleId":(context.battleId),"unitIds":(unitIds),"goal":(goal),"max_iterations":(maxIterations)}
 }
 
 ClassMethod ParseAndValidate(content As %String, context As %DynamicObject, Output proposal As %DynamicArray, Output reasoning As %String) As %Status
@@ -31,9 +21,14 @@ ClassMethod ParseAndValidate(content As %String, context As %DynamicObject, Outp
     try {
         set json = ..CleanJSON(content)
         set answer = ##class(%DynamicObject).%FromJSON(json)
-        if answer.%GetTypeOf("placements") '= "array" throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "LLM response has no placements array"))
-        if answer.%IsDefined("reasoning") set reasoning = answer.reasoning
-        if answer.placements.%Size() '= context.units.%Size() throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "LLM response has an unexpected unit count"))
+        if $classname(answer) = "%Library.DynamicArray" {
+            set placements = answer
+        } else {
+            if answer.%GetTypeOf("placements") '= "array" throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "LLM response has no placements array"))
+            set placements = answer.placements
+            if answer.%IsDefined("reasoning") set reasoning = answer.reasoning
+        }
+        if placements.%Size() '= context.units.%Size() throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "LLM response has an unexpected unit count"))
 
         kill allowed, seenUnit, seenCell, mainLine, mobileFlank
         set minimumX = context.board.width, maximumX = -1, mainMinimumX = context.board.width, mainMaximumX = -1
@@ -41,8 +36,8 @@ ClassMethod ParseAndValidate(content As %String, context As %DynamicObject, Outp
             set unit = context.units.%Get(index)
             set allowed(unit.unitId _ "") = unit.code
         }
-        for index = 0:1:(answer.placements.%Size() - 1) {
-            set placement = answer.placements.%Get(index)
+        for index = 0:1:(placements.%Size() - 1) {
+            set placement = placements.%Get(index)
             if '$isobject(placement) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Invalid LLM placement"))
             if placement.%IsDefined(0) {
                 if 'placement.%IsDefined(1) ! 'placement.%IsDefined(2) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Incomplete LLM placement"))
@@ -59,6 +54,8 @@ ClassMethod ParseAndValidate(content As %String, context As %DynamicObject, Outp
             if $data(seenCell(cell)) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Duplicated cell in LLM placement"))
             set seenUnit(unitId) = 1, seenCell(cell) = 1
             set code = allowed(unitId)
+            if ..IsForwardLineCode(code), (y '= 2) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Skirmish troops, archers and chariots must use the forward deployment line"))
+            if ##class(BronzeWars.AI.DeterministicDeploymentGenerator).IsCavalryCode(code), (y '= 1) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Cavalry must cover the flanks of the second deployment line"))
             if ..IsFlankingCode(code) set mobileFlank(x) = 1
             if (y = context.formationDoctrine.mainLineRow), ..IsMainLineCode(code) {
                 set mainLine(x) = 1
@@ -84,6 +81,19 @@ ClassMethod ParseAndValidate(content As %String, context As %DynamicObject, Outp
     return result
 }
 
+ClassMethod HasPlacementPayload(content As %String) As %Boolean
+{
+    set valid = 0
+    try {
+        set answer = ##class(%DynamicObject).%FromJSON(..CleanJSON(content))
+        if $classname(answer) = "%Library.DynamicArray" set valid = 1
+        if $classname(answer) = "%Library.DynamicObject", answer.%GetTypeOf("placements") = "array" set valid = 1
+    } catch exception {
+        set valid = 0
+    }
+    return valid
+}
+
 ClassMethod IsMainLineCode(code As %String) As %Boolean
 {
     return (code = "SPEARMEN") ! (code = "HEAVY_INFANTRY") ! (code = "MERCENARIES")
@@ -92,6 +102,11 @@ ClassMethod IsMainLineCode(code As %String) As %Boolean
 ClassMethod IsFlankingCode(code As %String) As %Boolean
 {
     return (code = "LIGHT_INFANTRY") ! (code = "LIGHT_CAVALRY") ! (code = "HEAVY_CAVALRY") ! (code = "CHARIOTS")
+}
+
+ClassMethod IsForwardLineCode(code As %String) As %Boolean
+{
+    return (code = "LIGHT_INFANTRY") ! (code = "ARCHERS") ! (code = "CHARIOTS")
 }
 
 ClassMethod CleanJSON(content As %String) As %String

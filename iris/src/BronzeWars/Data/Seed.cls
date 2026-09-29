@@ -51,15 +51,15 @@ ClassMethod BackfillBattleUnitTurnState() As %Status [ Private ]
 
 ClassMethod SeedUnitTypes() As %Status [ Private ]
 {
-    set sc = ..UpsertUnitType("LIGHT_INFANTRY", "Infantería ligera", "Escaramuceadores, honderos y tropas poco protegidas.", 100, 2, 4, 2, 2, 5, "Proyectiles ligeros", 10)
+    set sc = ..UpsertUnitType("LIGHT_INFANTRY", "Infantería ligera", "Escaramuceadores, honderos y tropas poco protegidas.", 60, 2, 4, 2, 2, 5, "Proyectiles ligeros", 10)
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitType("HEAVY_INFANTRY", "Infantería pesada", "Tropas con armadura, escudos pesados, lanzas cortas y espadas.", 100, 1, 7, 9, 1, 8, "Cuerpo a cuerpo", 0)
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitType("MERCENARIES", "Mercenarios", "Soldados profesionales versátiles, con protección y capacidad de combate intermedias.", 100, 2, 6, 6, 1, 7, "Cuerpo a cuerpo", 0)
     return:$SYSTEM.Status.IsError(sc) sc
-    set sc = ..UpsertUnitType("SPEARMEN", "Lanceros", "Buenos contra caballería y carros, malos contra infantería pesada y ligeramente protegidos.", 100, 1, 6, 5, 1, 7, "Cuerpo a cuerpo", 0)
+    set sc = ..UpsertUnitType("SPEARMEN", "Lanceros", "Buenos contra caballería y carros, malos contra infantería pesada y ligeramente protegidos.", 100, 1, 5, 6, 1, 7, "Cuerpo a cuerpo", 0)
     return:$SYSTEM.Status.IsError(sc) sc
-    set sc = ..UpsertUnitType("LIGHT_CAVALRY", "Caballería ligera", "Rápida y equipada con armas arrojadizas.", 30, 3, 5, 3, 2, 14, "Jabalinas", 5)
+    set sc = ..UpsertUnitType("LIGHT_CAVALRY", "Caballería ligera", "Rápida y equipada con armas arrojadizas.", 30, 3, 5, 3, 2, 9, "Jabalinas", 5)
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitType("HEAVY_CAVALRY", "Caballería pesada", "Menos rápida, bien protegida y destinada al choque.", 25, 2, 9, 8, 1, 10, "Cuerpo a cuerpo", 0)
     return:$SYSTEM.Status.IsError(sc) sc
@@ -83,9 +83,25 @@ ClassMethod SeedUnitProfiles() As %Status [ Private ]
         set sc = ..CopyProfile("HEAVY_CAVALRY", faction) return:$SYSTEM.Status.IsError(sc) sc
         set sc = ..CopyProfile("ARCHERS", faction) return:$SYSTEM.Status.IsError(sc) sc
     }
-    set sc = ..UpsertUnitProfile("CHARIOTS", "EGYPTIAN", 20, 3, 5, 3, 5, 10, "Flechas", 25)
+    set sc = ..UpsertUnitProfile("LIGHT_INFANTRY", "EGYPTIAN", 60, 2, 4, 2, 2, 5, "Proyectiles ligeros", 6)
     return:$SYSTEM.Status.IsError(sc) sc
-    return ..UpsertUnitProfile("CHARIOTS", "ASSYRIAN", 15, 3, 8, 7, 2, 18, "Jabalinas", 25)
+    set sc = ..UpsertUnitProfile("LIGHT_INFANTRY", "ASSYRIAN", 60, 2, 3, 2, 2, 5, "Proyectiles ligeros", 4)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("HEAVY_INFANTRY", "EGYPTIAN", 100, 1, 6, 8, 1, 8, "Cuerpo a cuerpo", 8)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("HEAVY_INFANTRY", "ASSYRIAN", 100, 1, 8, 10, 1, 8, "Cuerpo a cuerpo", 10)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("MERCENARIES", "EGYPTIAN", 100, 2, 6, 6, 1, 7, "Cuerpo a cuerpo", 8)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("MERCENARIES", "ASSYRIAN", 100, 2, 6, 6, 1, 7, "Cuerpo a cuerpo", 8)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("HEAVY_CAVALRY", "EGYPTIAN", 25, 2, 8, 7, 1, 10, "Cuerpo a cuerpo", 23)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("HEAVY_CAVALRY", "ASSYRIAN", 25, 2, 10, 9, 1, 10, "Cuerpo a cuerpo", 26)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("CHARIOTS", "EGYPTIAN", 20, 3, 5, 3, 5, 10, "Flechas", 22)
+    return:$SYSTEM.Status.IsError(sc) sc
+    return ..UpsertUnitProfile("CHARIOTS", "ASSYRIAN", 15, 3, 6, 4, 2, 18, "Jabalinas", 25)
 }
 
 ClassMethod SeedModifiers() As %Status [ Private ]

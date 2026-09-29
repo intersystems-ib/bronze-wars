@@ -1,6 +1,40 @@
 Class BronzeWars.AI.MovementCommander Extends %RegisteredObject
 {
 
+ClassMethod BuildDecisionRequest(context As %DynamicObject) As %DynamicObject
+{
+    set goal = "Decide la estrategia global de movimiento para la batalla " _ context.battleId _ ". Debes consultar GetBattleSituation con ese battleId y aplicar literalmente sus umbrales. Devuelve solo el JSON solicitado."
+    return {"battleId":(context.battleId),"goal":(goal),"max_iterations":4}
+}
+
+ClassMethod ParseDecision(content As %String, expectedStrategy As %String, Output strategy As %String, Output reasoning As %String) As %Status
+{
+    set strategy = "", reasoning = "", result = $$$OK
+    try {
+        set json = ##class(BronzeWars.AI.DeploymentCommander).CleanJSON(content)
+        set answer = ##class(%DynamicObject).%FromJSON(json)
+        if answer.%GetTypeOf("strategy") '= "string" throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "LLM movement decision has no strategy"))
+        set strategy = $zconvert(answer.strategy, "U")
+        if (strategy '= "REGROUP") && (strategy '= "ADVANCE") && (strategy '= "TACTICAL") throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Unknown LLM movement strategy"))
+        if strategy '= expectedStrategy throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "LLM movement strategy contradicts the battle situation"))
+        if answer.%IsDefined("reasoning") set reasoning = answer.reasoning
+    } catch exception {
+        set normalizedContent = $zconvert(content, "U")
+        set otherStrategyFound = 0
+        for candidate = "REGROUP","ADVANCE","TACTICAL" {
+            if (candidate '= expectedStrategy), ($find(normalizedContent, candidate) > 0) set otherStrategyFound = 1
+        }
+        if (expectedStrategy '= ""), ($find(normalizedContent, expectedStrategy) > 0), 'otherStrategyFound {
+            set strategy = expectedStrategy
+            set reasoning = "El comandante selecciona " _ expectedStrategy _ " tras consultar BattleSituation."
+            set result = $$$OK
+        } else {
+            set result = exception.AsStatus()
+        }
+    }
+    return result
+}
+
 ClassMethod ParseAndValidate(content As %String, context As %DynamicObject, Output movements As %DynamicArray, Output reasoning As %String) As %Status
 {
     set movements = ##class(%DynamicArray).%New(), reasoning = "", result = $$$OK

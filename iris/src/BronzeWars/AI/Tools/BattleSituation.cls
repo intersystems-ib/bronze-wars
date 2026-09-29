@@ -43,10 +43,28 @@ ClassMethod GetBattleSituation(battleId As %String) As %DynamicObject
     if initialStrength > 0 set casualtiesPercentage = +$justify((casualties * 100) / initialStrength, 0, 1)
 
     set result = {
+        "averageMorale":(+$justify(averageMorale, 0, 1)),
         "morale":(..DescribeMorale(averageMorale)),
-        "casualtiesPercentage":(casualtiesPercentage)
+        "casualtiesPercentage":(casualtiesPercentage),
+        "battleState":(..Classify(averageMorale, casualtiesPercentage)),
+        "recommendedStrategy":(..RecommendedStrategy(averageMorale, casualtiesPercentage))
     }
     return result
+}
+
+ClassMethod Classify(averageMorale As %Numeric, casualtiesPercentage As %Numeric) As %String
+{
+    if (averageMorale < 50), (casualtiesPercentage >= 50) return "BAD"
+    if (averageMorale > 50), (casualtiesPercentage < 50) return "GOOD"
+    return "NEUTRAL"
+}
+
+ClassMethod RecommendedStrategy(averageMorale As %Numeric, casualtiesPercentage As %Numeric) As %String
+{
+    set state = ..Classify(averageMorale, casualtiesPercentage)
+    if state = "BAD" return "REGROUP"
+    if state = "GOOD" return "ADVANCE"
+    return "TACTICAL"
 }
 
 ClassMethod DescribeMorale(averageMorale As %Numeric) As %String

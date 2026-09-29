@@ -11,6 +11,8 @@ export default function BattleSetup({ unitTypes, loadingUnitTypes, armyDesignId,
   const [width, setWidth] = useState(16);
   const [height, setHeight] = useState(12);
   const [quantities, setQuantities] = useState(DEFAULT_ARMY_QUANTITIES);
+  const selectedArmyIndex = Math.max(0, ARMY_DESIGNS.findIndex((design) => design.id === armyDesignId));
+  const selectedArmyDesign = ARMY_DESIGNS[selectedArmyIndex];
   const availableUnitTypes = getUnitTypesForDesign(unitTypes, armyDesignId);
   const spent = availableUnitTypes.reduce((total, unit) => total + ((quantities[unit.code] || 0) * unit.grainCost), 0);
   const unitCount = Object.values(quantities).reduce((total, quantity) => total + quantity, 0);
@@ -30,6 +32,11 @@ export default function BattleSetup({ unitTypes, loadingUnitTypes, armyDesignId,
     });
   }
 
+  function showArmy(offset) {
+    const nextIndex = (selectedArmyIndex + offset + ARMY_DESIGNS.length) % ARMY_DESIGNS.length;
+    onArmyDesignChange(ARMY_DESIGNS[nextIndex].id);
+  }
+
   return (
     <main className="start-page">
       <section className="start-card panel">
@@ -41,27 +48,43 @@ export default function BattleSetup({ unitTypes, loadingUnitTypes, armyDesignId,
           <fieldset className="army-picker field--wide">
             <legend>{t('setup.armyType')}</legend>
             <p>{t('setup.armyHelp')}</p>
-            <div className="army-options">
-              {ARMY_DESIGNS.map((design) => (
-                <label className={`army-option ${armyDesignId === design.id ? 'is-selected' : ''}`} key={design.id}>
-                  <input
-                    checked={armyDesignId === design.id}
-                    name="army-design"
-                    onChange={() => onArmyDesignChange(design.id)}
-                    type="radio"
-                    value={design.id}
-                  />
-                  <span className="army-option__art" aria-hidden="true">
-                    <UnitArtwork unitCode="ARCHERS" armyDesignId={design.id} />
-                    <UnitArtwork unitCode="HEAVY_INFANTRY" armyDesignId={design.id} />
-                    <UnitArtwork unitCode="CHARIOTS" armyDesignId={design.id} />
-                  </span>
-                  <span className="army-option__body">
-                    <strong>{t(design.nameKey)}</strong>
-                    <small>{t(design.descriptionKey)}</small>
-                  </span>
-                </label>
-              ))}
+            <div className="army-gallery">
+              <button
+                aria-label={t('setup.previousArmy', { army: t(ARMY_DESIGNS[(selectedArmyIndex - 1 + ARMY_DESIGNS.length) % ARMY_DESIGNS.length].nameKey) })}
+                className="army-gallery__control"
+                onClick={() => showArmy(-1)}
+                title={t(ARMY_DESIGNS[(selectedArmyIndex - 1 + ARMY_DESIGNS.length) % ARMY_DESIGNS.length].nameKey)}
+                type="button"
+              >
+                &lt;
+              </button>
+              <label aria-live="polite" className="army-option is-selected" key={selectedArmyDesign.id}>
+                <input
+                  checked
+                  name="army-design"
+                  onChange={() => onArmyDesignChange(selectedArmyDesign.id)}
+                  type="radio"
+                  value={selectedArmyDesign.id}
+                />
+                <span className="army-option__art" aria-hidden="true">
+                  <UnitArtwork unitCode="ARCHERS" armyDesignId={selectedArmyDesign.id} />
+                  <UnitArtwork unitCode="HEAVY_INFANTRY" armyDesignId={selectedArmyDesign.id} />
+                  <UnitArtwork unitCode="CHARIOTS" armyDesignId={selectedArmyDesign.id} />
+                </span>
+                <span className="army-option__body">
+                  <strong>{t(selectedArmyDesign.nameKey)}</strong>
+                  <small>{t(selectedArmyDesign.descriptionKey)}</small>
+                </span>
+              </label>
+              <button
+                aria-label={t('setup.nextArmy', { army: t(ARMY_DESIGNS[(selectedArmyIndex + 1) % ARMY_DESIGNS.length].nameKey) })}
+                className="army-gallery__control"
+                onClick={() => showArmy(1)}
+                title={t(ARMY_DESIGNS[(selectedArmyIndex + 1) % ARMY_DESIGNS.length].nameKey)}
+                type="button"
+              >
+                &gt;
+              </button>
             </div>
           </fieldset>
           <label className="field field--wide">

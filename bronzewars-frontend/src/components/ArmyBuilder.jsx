@@ -68,7 +68,21 @@ export default function ArmyBuilder({ unitTypes, quantities, armyDesignId, loadi
                     aria-label={t('armyBuilder.movementStat', { value: unit.speed })}
                     title={t('armyBuilder.movementStat', { value: unit.speed })}
                   >
-                    <dt aria-hidden="true">&#x130BB;</dt><dd>{unit.speed}</dd>
+                    <dt aria-hidden="true">&#x1321D;</dt><dd>{unit.speed}</dd>
+                  </div>
+                  <div
+                    className="army-unit__stat army-unit__stat--projectiles"
+                    aria-label={t('armyBuilder.projectilesStat', { value: unit.initialProjectiles })}
+                    title={t('armyBuilder.projectilesStat', { value: unit.initialProjectiles })}
+                  >
+                    <dt aria-hidden="true">&#x13316;</dt><dd>{unit.initialProjectiles}</dd>
+                  </div>
+                  <div
+                    className="army-unit__stat army-unit__stat--damage"
+                    aria-label={t('armyBuilder.damageStat', { value: unit.damage })}
+                    title={t('armyBuilder.damageStat', { value: unit.damage })}
+                  >
+                    <dt aria-hidden="true">&#x130BF;</dt><dd>{unit.damage}</dd>
                   </div>
                 </dl>
               </div>

@@ -14,6 +14,20 @@ ClassMethod UnitType(unitType As BronzeWars.Model.UnitType, includeStats As %Boo
             do ..ApplyStats(value, unitType)
         }
         do value.%Set("initialProjectiles", unitType.InitialProjectiles)
+        set attackModifiers = ##class(%DynamicArray).%New(), attackerTypeId = unitType.%Id()
+        &sql(DECLARE AttackModifierCursor CURSOR FOR
+            SELECT %ID FROM BronzeWars_Model.UnitModifier
+            WHERE AttackerType = :attackerTypeId AND Active = 1
+            ORDER BY DefenderType)
+        &sql(OPEN AttackModifierCursor)
+        for {
+            &sql(FETCH AttackModifierCursor INTO :modifierId)
+            quit:(SQLCODE'=0)
+            set modifier = ##class(BronzeWars.Model.UnitModifier).%OpenId(modifierId)
+            do attackModifiers.%Push({"defenderCode":(modifier.DefenderType.Code),"value":(modifier.AttackModifier)})
+        }
+        &sql(CLOSE AttackModifierCursor)
+        do value.%Set("attackModifiers", attackModifiers)
         if faction = "" {
             set profiles = ##class(%DynamicObject).%New(), unitTypeId = unitType.%Id()
             &sql(DECLARE ProfileCursor CURSOR FOR SELECT %ID FROM BronzeWars_Model.UnitProfile WHERE UnitType = :unitTypeId AND Active = 1 ORDER BY Faction)

@@ -122,7 +122,9 @@ h3 { margin-bottom: 0.35rem; color: #e9d8bd; font-size: 0.95rem; }
 .army-picker { min-width: 0; margin: 0; border: 0; padding: 0; }
 .army-picker legend { margin-bottom: 0.45rem; padding: 0; color: #c7b79e; font-size: 0.76rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 .army-picker > p { margin-bottom: 0.75rem; color: var(--muted); font-size: 0.72rem; line-height: 1.5; }
-.army-options { display: grid; gap: 0.7rem; }
+.army-gallery { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem; gap: 0.6rem; align-items: stretch; }
+.army-gallery__control { display: grid; min-height: 100%; border: 1px solid var(--line); padding: 0; place-items: center; color: #d8bc91; background: rgba(13, 11, 8, 0.72); cursor: pointer; font-family: Cinzel, Georgia, serif; font-size: 1.35rem; transition: 160ms ease; }
+.army-gallery__control:hover, .army-gallery__control:focus-visible { border-color: var(--bronze); color: #fff0d2; background: rgba(201, 139, 67, 0.12); outline: none; }
 .army-option { position: relative; display: grid; grid-template-columns: minmax(9rem, 0.8fr) minmax(10rem, 1fr); gap: 1rem; align-items: center; overflow: hidden; border: 1px solid var(--line); padding: 0.75rem; background: rgba(13, 11, 8, 0.52); cursor: pointer; transition: 160ms ease; }
 .army-option:hover, .army-option.is-selected { border-color: var(--bronze); background: rgba(201, 139, 67, 0.09); }
 .army-option.is-selected { box-shadow: inset 3px 0 var(--bronze-bright); }
@@ -152,13 +154,15 @@ h3 { margin-bottom: 0.35rem; color: #e9d8bd; font-size: 0.95rem; }
 .army-unit__body strong, .army-unit__cost { display: block; }
 .army-unit__body strong { overflow: hidden; color: #eadbc3; font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
 .army-unit__cost { margin-top: 0.2rem; color: var(--bronze-bright); font-size: 0.62rem; }
-.army-unit__stats { display: flex; gap: 0.3rem; margin: 0.38rem 0 0; }
+.army-unit__stats { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.38rem 0 0; }
 .army-unit__stat { display: flex; gap: 0.18rem; align-items: baseline; border: 1px solid currentColor; border-radius: 2px; padding: 0.12rem 0.28rem; background: rgba(0, 0, 0, 0.2); font-size: 0.62rem; line-height: 1; }
 .army-unit__stat dt { font-family: "Segoe UI Historic", "Noto Sans Egyptian Hieroglyphs", sans-serif; font-size: 0.82rem; font-weight: 400; }
 .army-unit__stat dd { margin: 0; color: #f2eadc; font-weight: 700; }
 .army-unit__stat--attack { color: #e8665d; }
 .army-unit__stat--defense { color: #66bd72; }
 .army-unit__stat--movement { color: #5b9ee8; }
+.army-unit__stat--projectiles { color: #e4cf58; }
+.army-unit__stat--damage { color: #e98b3a; }
 .quantity-control { display: grid; grid-template-columns: 1.75rem 2.2rem 1.75rem; }
 .quantity-control button, .quantity-control input { height: 1.9rem; border: 1px solid var(--line); color: #eadfca; text-align: center; background: rgba(13, 11, 8, 0.72); }
 .quantity-control button { cursor: pointer; }
@@ -325,17 +329,31 @@ h3 { margin-bottom: 0.35rem; color: #e9d8bd; font-size: 0.95rem; }
 .encounter-combatant__art .unit-artwork { position: relative; z-index: 0; }
 .encounter-combatant.side-ai .encounter-combatant__art { border-color: rgba(183, 76, 61, 0.76); }
 .encounter-combatant__damage { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; opacity: 1; color: #ff3025; background: radial-gradient(circle, rgba(36, 0, 0, 0.46) 0, rgba(36, 0, 0, 0) 58%); font-family: Inter, system-ui, sans-serif; font-size: clamp(3rem, 8vw, 5.8rem); font-weight: 900; line-height: 1; pointer-events: none; -webkit-text-stroke: 1px rgba(73, 0, 0, 0.9); text-shadow: 0 4px 6px #000, 0 0 12px #000, 0 0 28px rgba(255, 38, 26, 0.95); animation: encounter-damage 3s ease-out forwards; }
-.encounter-combatant__primary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin: 0.65rem 0; }
-.encounter-combatant__primary-stats div { display: flex; gap: 0.35rem; align-items: center; justify-content: center; border: 1px solid currentColor; padding: 0.35rem; background: rgba(0, 0, 0, 0.2); }
+.encounter-combatant__primary-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.3rem; margin: 0.65rem 0; }
+.encounter-combatant__primary-stats div { display: flex; min-width: 0; gap: 0.25rem; align-items: center; justify-content: center; border: 1px solid currentColor; padding: 0.35rem 0.2rem; background: rgba(0, 0, 0, 0.2); }
 .encounter-combatant__primary-stats dt { font-family: "Segoe UI Historic", "Noto Sans Egyptian Hieroglyphs", sans-serif; font-size: 1rem; }
 .encounter-combatant__primary-stats dd { margin: 0; color: #f2eadc; font-size: 0.82rem; font-weight: 700; }
 .encounter-combatant__primary-stats .is-attack { color: #e8665d; }
 .encounter-combatant__primary-stats .is-defense { color: #66bd72; }
 .encounter-combatant__primary-stats .is-movement { color: #5b9ee8; }
+.encounter-combatant__primary-stats .is-projectiles { color: #e4cf58; }
+.encounter-combatant__primary-stats .is-damage { color: #e98b3a; }
+.encounter-combatant__bonuses { margin: 0.65rem 0; padding: 0.55rem 0.65rem; border: 1px solid rgba(214, 184, 122, 0.34); background: rgba(20, 14, 9, 0.48); }
+.encounter-combatant__bonuses > strong { display: block; margin-bottom: 0.35rem; color: #d9c18b; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.encounter-combatant__bonuses ul { display: grid; gap: 0.28rem; margin: 0; padding: 0; list-style: none; }
+.encounter-combatant__bonuses li { display: grid; grid-template-columns: 1.2rem 1fr auto; gap: 0.35rem; align-items: center; font-size: 0.76rem; }
+.encounter-combatant__bonuses li > span:first-child { font-family: "Segoe UI Historic", "Noto Sans Egyptian Hieroglyphs", sans-serif; font-size: 1rem; text-align: center; }
+.encounter-combatant__bonuses li b { color: currentColor; }
+.encounter-combatant__bonuses .is-attack { color: #e8665d; }
+.encounter-combatant__bonuses .is-defense { color: #66bd72; }
+.encounter-combatant__bonuses .is-morale { color: #efb05b; }
 .encounter-combatant__details { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
 .encounter-combatant__details div { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0.45rem; }
 .encounter-combatant__details dt { color: var(--muted); font-size: 0.56rem; letter-spacing: 0.07em; text-transform: uppercase; }
 .encounter-combatant__details dd { margin: 0.15rem 0 0; color: #f0dfc3; font-size: 0.76rem; font-weight: 700; }
+.encounter-combatant__morale { margin-top: 0.65rem; }
+.encounter-combatant__morale-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.3rem; color: var(--muted); font-size: 0.56rem; letter-spacing: 0.07em; text-transform: uppercase; }
+.encounter-combatant__morale-heading strong { color: #f0dfc3; font-size: 0.72rem; }
 .encounter-modal__footer { display: flex; gap: 1rem; align-items: center; justify-content: space-between; margin-top: 1.2rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .encounter-modal__footer span { color: var(--muted); font-size: 0.68rem; }
 .encounter-modal__footer.is-result { visibility: hidden; }
@@ -344,18 +362,23 @@ h3 { margin-bottom: 0.35rem; color: #e9d8bd; font-size: 0.95rem; }
 .unit-inspector h2 { margin: 0.25rem 0 0.9rem; color: #eadbc3; font-size: 1.15rem; }
 .unit-inspector__empty { margin: 1.2rem 0 0; color: var(--muted); font-size: 0.75rem; line-height: 1.55; }
 .unit-inspector__art { aspect-ratio: 3 / 2; overflow: hidden; border: 1px solid var(--bronze-dark); background: #21180f; }
-.unit-inspector__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin: 0.75rem 0; }
-.unit-inspector__stat { display: flex; gap: 0.35rem; align-items: center; justify-content: center; border: 1px solid currentColor; border-radius: 2px; padding: 0.4rem; background: rgba(0, 0, 0, 0.2); }
+.unit-inspector__stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.3rem; margin: 0.75rem 0; }
+.unit-inspector__stat { display: flex; min-width: 0; gap: 0.25rem; align-items: center; justify-content: center; border: 1px solid currentColor; border-radius: 2px; padding: 0.35rem 0.2rem; background: rgba(0, 0, 0, 0.2); }
 .unit-inspector__stat dt { font-family: "Segoe UI Historic", "Noto Sans Egyptian Hieroglyphs", sans-serif; font-size: 1rem; }
 .unit-inspector__stat dd { margin: 0; color: #f2eadc; font-size: 0.82rem; font-weight: 700; }
 .unit-inspector__stat.is-attack { color: #e8665d; }
 .unit-inspector__stat.is-defense { color: #66bd72; }
 .unit-inspector__stat.is-movement { color: #5b9ee8; }
+.unit-inspector__stat.is-projectiles { color: #e4cf58; }
+.unit-inspector__stat.is-damage { color: #e98b3a; }
 .unit-inspector__details { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
 .unit-inspector__details div { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0.55rem; }
 .unit-inspector__details dt { color: var(--muted); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; }
 .unit-inspector__details dd { margin: 0.2rem 0 0; color: #f0dfc3; font-size: 0.82rem; font-weight: 700; }
-.morale-meter { height: 5px; margin-top: 0.7rem; overflow: hidden; background: rgba(255, 255, 255, 0.07); }
+.unit-inspector__morale { margin-top: 0.75rem; }
+.unit-inspector__morale-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.3rem; color: var(--muted); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.unit-inspector__morale-heading strong { color: #f0dfc3; font-size: 0.75rem; }
+.morale-meter { height: 5px; overflow: hidden; background: rgba(255, 255, 255, 0.07); }
 .morale-meter span { display: block; height: 100%; background: linear-gradient(90deg, #9b473d, #d1ad55, #73ad6f); }
 .unit-inspector__description { margin: 0.75rem 0 0; color: var(--muted); font-size: 0.68rem; line-height: 1.5; }
 
@@ -395,6 +418,7 @@ footer { padding: 1rem; color: #716758; font-size: 0.62rem; text-align: center; 
   .brand small, .language-switcher > span { display: none; }
   .start-card, .unit-codex { padding: 1.1rem; }
   .setup-form, .unit-type-list { grid-template-columns: 1fr; }
+  .army-gallery { grid-template-columns: 2.1rem minmax(0, 1fr) 2.1rem; gap: 0.4rem; }
   .army-option { grid-template-columns: 1fr; }
   .army-option__art { grid-column: 1 / -1; }
   .army-builder__heading { align-items: start; flex-direction: column; }

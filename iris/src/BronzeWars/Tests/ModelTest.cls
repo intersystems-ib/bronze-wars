@@ -9,13 +9,13 @@ Method Test01SeedContainsExpectedUnits()
     &sql(SELECT COUNT(*) INTO :unitCount FROM BronzeWars_Model.UnitType WHERE Active = 1)
     do $$$AssertEquals(unitCount, 8, "Exactly eight active master unit types exist")
 
-    do ..AssertUnit("LIGHT_INFANTRY", "Infantería ligera", 100, 2, 4, 2, 2, 5, "Proyectiles ligeros")
+    do ..AssertUnit("LIGHT_INFANTRY", "Infantería ligera", 60, 2, 4, 2, 2, 5, "Proyectiles ligeros")
     do ..AssertUnit("HEAVY_INFANTRY", "Infantería pesada", 100, 1, 7, 9, 1, 8, "Cuerpo a cuerpo")
     do ..AssertUnit("MERCENARIES", "Mercenarios", 100, 2, 6, 6, 1, 7, "Cuerpo a cuerpo")
     set mercenaries = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("MERCENARIES")
     do $$$AssertEquals(mercenaries.GrainCost, 8, "Mercenaries cost the infantry average plus one")
-    do ..AssertUnit("SPEARMEN", "Lanceros", 100, 1, 6, 5, 1, 7, "Cuerpo a cuerpo")
-    do ..AssertUnit("LIGHT_CAVALRY", "Caballería ligera", 30, 3, 5, 3, 2, 14, "Jabalinas")
+    do ..AssertUnit("SPEARMEN", "Lanceros", 100, 1, 5, 6, 1, 7, "Cuerpo a cuerpo")
+    do ..AssertUnit("LIGHT_CAVALRY", "Caballería ligera", 30, 3, 5, 3, 2, 9, "Jabalinas")
     do ..AssertUnit("HEAVY_CAVALRY", "Caballería pesada", 25, 2, 9, 8, 1, 10, "Cuerpo a cuerpo")
     do ..AssertUnit("CHARIOTS", "Carros", 20, 3, 5, 3, 5, 10, "Flechas")
     do ..AssertUnit("ARCHERS", "Arqueros", 80, 2, 4, 2, 6, 8, "Flechas")
@@ -24,13 +24,25 @@ Method Test01SeedContainsExpectedUnits()
     do $$$AssertEquals(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY").InitialProjectiles, 5, "Light cavalry starts with five projectiles")
     do $$$AssertEquals(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_INFANTRY").InitialProjectiles, 10, "Light infantry starts with ten projectiles")
     do $$$AssertEquals(##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_INFANTRY").InitialProjectiles, 0, "Melee units start without projectiles")
-    do ..AssertProfile("CHARIOTS", "EGYPTIAN", 3, 5, 3)
-    do ..AssertProfile("CHARIOTS", "ASSYRIAN", 3, 8, 7)
+    do ..AssertProfile("LIGHT_INFANTRY", "EGYPTIAN", 2, 4, 2, 6)
+    do ..AssertProfile("LIGHT_INFANTRY", "ASSYRIAN", 2, 3, 2, 4)
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_INFANTRY").%Id(), "EGYPTIAN").InitialStrength, 60, "Egyptian light infantry uses the reduced strength")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_INFANTRY").%Id(), "ASSYRIAN").InitialStrength, 60, "Assyrian light infantry uses the reduced strength")
+    do ..AssertProfile("HEAVY_INFANTRY", "EGYPTIAN", 1, 6, 8, 8)
+    do ..AssertProfile("HEAVY_INFANTRY", "ASSYRIAN", 1, 8, 10, 10)
+    do ..AssertProfile("SPEARMEN", "EGYPTIAN", 1, 5, 6, 6)
+    do ..AssertProfile("SPEARMEN", "ASSYRIAN", 1, 5, 6, 6)
+    do ..AssertProfile("HEAVY_CAVALRY", "EGYPTIAN", 2, 8, 7, 23)
+    do ..AssertProfile("HEAVY_CAVALRY", "ASSYRIAN", 2, 10, 9, 26)
+    do ..AssertProfile("CHARIOTS", "EGYPTIAN", 3, 5, 3, 22)
+    do ..AssertProfile("CHARIOTS", "ASSYRIAN", 3, 6, 4, 25)
     do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("CHARIOTS").%Id(), "EGYPTIAN").Damage, 10, "Egyptian chariot projectile damage is doubled")
     do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("CHARIOTS").%Id(), "ASSYRIAN").Damage, 18, "Assyrian chariot projectile damage is doubled")
-    do ..AssertProfile("MERCENARIES", "EGYPTIAN", 2, 6, 6)
-    do ..AssertProfile("MERCENARIES", "ASSYRIAN", 2, 6, 6)
+    do ..AssertProfile("MERCENARIES", "EGYPTIAN", 2, 6, 6, 8)
+    do ..AssertProfile("MERCENARIES", "ASSYRIAN", 2, 6, 6, 8)
     do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY").%Id(), "EGYPTIAN").InitialStrength, 30, "Egyptian light cavalry uses the reduced strength")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY").%Id(), "EGYPTIAN").Damage, 9, "Egyptian light cavalry uses the reduced damage")
+    do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY").%Id(), "ASSYRIAN").Damage, 9, "Assyrian light cavalry uses the reduced damage")
     do $$$AssertEquals(##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_CAVALRY").%Id(), "ASSYRIAN").InitialStrength, 25, "Assyrian heavy cavalry uses the reduced strength")
 }
 
@@ -116,16 +128,8 @@ Method Test08KnownAndMissingModifiers()
 
     do $$$AssertEquals(##class(BronzeWars.Model.UnitModifier).GetAttackModifier(spearmen, heavyCavalry), 3, "Spearmen receive +3 against heavy cavalry")
     do $$$AssertEquals(##class(BronzeWars.Model.UnitModifier).GetAttackModifier(spearmen, archers), 0, "A matchup without a rule has modifier 0")
-}
-
-Method Test09FormationMoraleScale()
-{
-    do $$$AssertEquals(##class(BronzeWars.Rules.FormationMorale).MoraleForNeighbors(0), 70, "An isolated infantry unit starts with 70 morale")
-    do $$$AssertEquals(##class(BronzeWars.Rules.FormationMorale).MoraleForNeighbors(1), 80, "An infantry unit with one neighbor starts with 80 morale")
-    do $$$AssertEquals(##class(BronzeWars.Rules.FormationMorale).MoraleForNeighbors(2), 90, "An infantry unit with two neighbors starts with 90 morale")
-    do $$$AssertTrue(##class(BronzeWars.Rules.FormationMorale).IsSupportedUnitCode("SPEARMEN"), "Spearmen use formation morale")
-    do $$$AssertTrue(##class(BronzeWars.Rules.FormationMorale).IsSupportedUnitCode("LIGHT_INFANTRY"), "Light infantry uses formation morale")
-    do $$$AssertNotTrue(##class(BronzeWars.Rules.FormationMorale).IsSupportedUnitCode("LIGHT_CAVALRY"), "Cavalry keeps its initial morale")
+    set serializedSpearmen = ##class(BronzeWars.API.Serializer).UnitType(spearmen)
+    do $$$AssertTrue(serializedSpearmen.attackModifiers.%Size() > 0, "Serialized unit types expose their matchup modifiers to the battle UI")
 }
 
 Method Test10FormationFallbackCoversFrontage()
@@ -165,6 +169,8 @@ Method Test10FormationFallbackCoversFrontage()
     set compactAnswer = {"placements":(compactPlacements)}
     set sc = ##class(BronzeWars.AI.DeploymentCommander).ParseAndValidate(compactAnswer.%ToJSON(), context, .validated, .reasoning)
     do $$$AssertStatusOK(sc, "The compact LLM deployment format passes the same validation")
+    set sc = ##class(BronzeWars.AI.DeploymentCommander).ParseAndValidate(compactPlacements.%ToJSON(), context, .validated, .reasoning)
+    do $$$AssertStatusOK(sc, "A bare compact placement array returned by the AI agent passes validation")
 }
 
 Method Test11DeterministicAIMovementDoctrine()
@@ -226,6 +232,30 @@ Method Test11DeterministicAIMovementDoctrine()
         }
     }
     do $$$AssertTrue(movedCount > 0, "A defensive commander advances instead of holding every even-numbered round")
+
+    set decision = "{""strategy"":""ADVANCE"",""reasoning"":""The battle is favorable""}"
+    set sc = ##class(BronzeWars.AI.MovementCommander).ParseDecision(decision, "ADVANCE", .strategy, .decisionReasoning)
+    do $$$AssertStatusOK(sc, "A movement strategy matching the tool result is accepted")
+    do $$$AssertEquals(strategy, "ADVANCE", "The validated movement strategy is retained")
+    set sc = ##class(BronzeWars.AI.MovementCommander).ParseDecision(decision, "REGROUP", .strategy, .decisionReasoning)
+    do $$$AssertStatusNotOK(sc, "A movement strategy contradicting the tool result is rejected")
+
+    set advanceContext = {"board":{"width":12,"height":12},"humanUnits":(##class(%DynamicArray).%New()),"aiUnits":(##class(%DynamicArray).%New())}
+    do advanceContext.humanUnits.%Push({"unitId":900,"x":0,"y":10})
+    do advanceContext.aiUnits.%Push({"unitId":901,"code":"SPEARMEN","x":0,"y":1,"remainingMovement":1})
+    do advanceContext.aiUnits.%Push({"unitId":902,"code":"LIGHT_CAVALRY","x":5,"y":2,"remainingMovement":3})
+    set sc = ##class(BronzeWars.AI.DeterministicMovementGenerator).Generate(advanceContext, .advanceMovements, "ADVANCE")
+    do $$$AssertStatusOK(sc, "The favorable battle strategy produces a general advance")
+    do $$$AssertEquals(advanceMovements.%Get(0).y, 3, "The front unit advances one cell")
+    do $$$AssertEquals(advanceMovements.%Get(1).y, 2, "The rear unit advances one cell")
+
+    set regroupContext = {"board":{"width":12,"height":12},"humanUnits":(##class(%DynamicArray).%New()),"aiUnits":(##class(%DynamicArray).%New())}
+    do regroupContext.aiUnits.%Push({"unitId":911,"code":"SPEARMEN","x":0,"y":1,"remainingMovement":1})
+    do regroupContext.aiUnits.%Push({"unitId":912,"code":"LIGHT_CAVALRY","x":10,"y":1,"remainingMovement":3})
+    set sc = ##class(BronzeWars.AI.DeterministicMovementGenerator).Generate(regroupContext, .regroupMovements, "REGROUP")
+    do $$$AssertStatusOK(sc, "The unfavorable battle strategy produces a regrouping movement")
+    do $$$AssertEquals(regroupMovements.%Get(0).x, 1, "The left unit moves toward the army center")
+    do $$$AssertEquals(regroupMovements.%Get(1).x, 7, "The right unit uses its movement to approach the army center")
 }
 
 Method Test12CommanderArchetypes()
@@ -238,18 +268,33 @@ Method Test12CommanderArchetypes()
         do $$$AssertNotEquals(##class(BronzeWars.AI.Commanders.Strategy).Doctrine(type), "", type _ " has composition doctrine")
         do $$$AssertNotEquals(##class(BronzeWars.AI.Commanders.Strategy).MovementInstruction(type), "", type _ " has movement doctrine")
         set target = ##class(BronzeWars.AI.Commanders.Strategy).MainLineTarget(type, 10, 16)
-        set composition = ##class(BronzeWars.AI.Commanders.Strategy).FallbackComposition(type, 48, target)
-        set sc = ##class(BronzeWars.Rules.ArmyBudget).ValidateComposition(composition, 48, .grain, .units)
-        do $$$AssertStatusOK(sc, type _ " fallback is a valid 100-grain army")
-        do $$$AssertEquals(grain, 100, type _ " fallback spends all grain")
-        set sc = ##class(BronzeWars.AI.Commanders.Strategy).ValidateComposition(type, composition)
-        do $$$AssertStatusOK(sc, type _ " fallback reflects its commander priorities")
-        set lineUnits = 0
-        for compositionIndex = 0:1:(composition.%Size() - 1) {
-            set selection = composition.%Get(compositionIndex)
-            if ##class(BronzeWars.AI.DeploymentCommander).IsMainLineCode(selection.code) set lineUnits = lineUnits + selection.quantity
+        for faction = "EGYPTIAN","ASSYRIAN" {
+            set composition = ##class(BronzeWars.AI.Commanders.Strategy).FallbackComposition(type, 48, target, faction)
+            set sc = ##class(BronzeWars.Rules.ArmyBudget).ValidateComposition(composition, 48, .grain, .units, faction)
+            do $$$AssertStatusOK(sc, type _ "/" _ faction _ " fallback is a valid 100-grain army")
+            do $$$AssertEquals(grain, 100, type _ "/" _ faction _ " fallback spends all grain")
+            do $$$AssertTrue(units <= ##class(BronzeWars.Rules.ArmyBudget).#AIMaxUnits, type _ "/" _ faction _ " fallback never exceeds fourteen units")
+            set sc = ##class(BronzeWars.AI.Commanders.Strategy).ValidateComposition(type, composition)
+            do $$$AssertStatusOK(sc, type _ "/" _ faction _ " fallback reflects its commander priorities")
+            set lineUnits = 0, largestQuantity = 0
+            for compositionIndex = 0:1:(composition.%Size() - 1) {
+                set selection = composition.%Get(compositionIndex)
+                if ##class(BronzeWars.AI.DeploymentCommander).IsMainLineCode(selection.code) set lineUnits = lineUnits + selection.quantity
+                if selection.quantity > largestQuantity set largestQuantity = selection.quantity
+                if type = "SKIRMISHER", selection.code = "ARCHERS" set hasSkirmisherArchers = 1
+                if type = "SKIRMISHER", selection.code = "LIGHT_INFANTRY" set hasSkirmisherInfantry = 1
+                if type = "SKIRMISHER", selection.code = "LIGHT_CAVALRY" set hasSkirmisherCavalry = 1
+            }
+            do $$$AssertTrue(composition.%Size() >= 3, type _ "/" _ faction _ " fallback uses at least three troop types")
+            do $$$AssertTrue((largestQuantity * 2) <= (units + 1), type _ "/" _ faction _ " fallback is not dominated by one troop type")
+            do $$$AssertTrue(lineUnits >= target, type _ "/" _ faction _ " fallback supports its required main line")
+            if type = "SKIRMISHER" {
+                do $$$AssertTrue($get(hasSkirmisherArchers), faction _ " skirmisher includes archers")
+                do $$$AssertTrue($get(hasSkirmisherInfantry), faction _ " skirmisher includes light infantry")
+                do $$$AssertTrue($get(hasSkirmisherCavalry), faction _ " skirmisher includes light cavalry")
+            }
+            kill hasSkirmisherArchers, hasSkirmisherInfantry, hasSkirmisherCavalry
         }
-        do $$$AssertTrue(lineUnits >= target, type _ " fallback supports its required main line")
     }
     for randomIndex = 1:1:20 do $$$AssertTrue(##class(BronzeWars.AI.Commanders.Strategy).IsValid(##class(BronzeWars.AI.Commanders.Strategy).RandomType()), "Random selection always returns a known archetype")
 
@@ -261,6 +306,18 @@ Method Test12CommanderArchetypes()
     set sc = ##class(BronzeWars.AI.ArmyCommander).ParseAndValidate(compactContent, compactContext, .compactComposition, .compactReasoning)
     do $$$AssertStatusOK(sc, "The compact LLM army format passes strategic and budget validation")
     do $$$AssertEquals(compactComposition.%Size(), 3, "The compact army response retains every selected type")
+
+    set oversizedContext = {"commanderType":"BALANCED","grainBudget":100,"board":{"width":16},"formationDoctrine":{"mainLineTarget":8},"unitTypes":(##class(%DynamicArray).%New())}
+    do oversizedContext.unitTypes.%Push({"code":"SPEARMEN","grainCost":6})
+    do oversizedContext.unitTypes.%Push({"code":"ARCHERS","grainCost":7})
+    do oversizedContext.unitTypes.%Push({"code":"MERCENARIES","grainCost":8})
+    set oversizedContent = "{""composition"":[[""SPEARMEN"",8],[""ARCHERS"",4],[""MERCENARIES"",3]]}"
+    set sc = ##class(BronzeWars.AI.ArmyCommander).ParseAndValidate(oversizedContent, oversizedContext, .oversizedComposition, .oversizedReasoning)
+    do $$$AssertStatusNotOK(sc, "A valid-budget LLM response with fifteen units is rejected")
+
+    set incompleteSkirmishers = [{"code":"LIGHT_INFANTRY","quantity":5},{"code":"SPEARMEN","quantity":4},{"code":"ARCHERS","quantity":3}]
+    set sc = ##class(BronzeWars.AI.Commanders.Strategy).ValidateComposition("SKIRMISHER", incompleteSkirmishers)
+    do $$$AssertStatusNotOK(sc, "A skirmisher army without light cavalry is rejected")
 }
 
 Method Test13FlankingDeploymentUsesMobileExtremes()
@@ -279,6 +336,25 @@ Method Test13FlankingDeploymentUsesMobileExtremes()
     set answer = {"placements":(placements),"reasoning":"Mobile units on both flanks"}
     set sc = ##class(BronzeWars.AI.DeploymentCommander).ParseAndValidate(answer.%ToJSON(), context, .validated, .reasoning)
     do $$$AssertStatusOK(sc, "The flanking fallback extends the enemy frontage with mobile units on both extremes")
+    for placementIndex = 0:1:(placements.%Size() - 1) {
+        set placement = placements.%Get(placementIndex), code = ""
+        for unitIndex = 0:1:(context.units.%Size() - 1) {
+            set deploymentUnit = context.units.%Get(unitIndex)
+            if deploymentUnit.unitId = placement.unitId set code = deploymentUnit.code
+        }
+        if ##class(BronzeWars.AI.DeploymentCommander).IsForwardLineCode(code) do $$$AssertEquals(placement.y, 2, code _ " deploys on the line closest to the enemy")
+        if ##class(BronzeWars.AI.DeterministicDeploymentGenerator).IsCavalryCode(code) do $$$AssertEquals(placement.y, 1, code _ " deploys on a flank of the second line")
+    }
+
+    set defensiveContext = {"commanderType":"DEFENSIVE","board":{"width":16,"height":12},"humanFormation":{"minX":3,"maxX":8,"frontage":6},"formationDoctrine":{"mainLineTarget":6,"frontageTarget":6,"mainLineRow":1},"units":(##class(%DynamicArray).%New())}
+    for defensiveId = 1:1:8 do defensiveContext.units.%Push({"unitId":(defensiveId),"code":"SPEARMEN","name":"SPEARMEN"})
+    set sc = ##class(BronzeWars.AI.DeterministicDeploymentGenerator).GenerateFromContext(defensiveContext, .defensivePlacements)
+    do $$$AssertStatusOK(sc, "The defensive deployment leaves surplus line troops in reserve")
+    set reserveCount = 0
+    for placementIndex = 0:1:(defensivePlacements.%Size() - 1) {
+        if defensivePlacements.%Get(placementIndex).y = 0 set reserveCount = reserveCount + 1
+    }
+    do $$$AssertEquals(reserveCount, 2, "Defensive surplus units use the third deployment line as reserve")
 
     set wideTarget = ##class(BronzeWars.AI.Commanders.Strategy).MainLineTarget("FLANKER", 16, 16)
     set wideComposition = ##class(BronzeWars.AI.Commanders.Strategy).FallbackComposition("FLANKER", 48, wideTarget)
@@ -329,6 +405,49 @@ Method Test14MeleeCombatFormula()
     do $$$AssertEquals(result.defenseFactor, .5, "Ranged defense factor uses half the defense score")
     do $$$AssertEquals(result.defenderCasualties, 3, "Ranged casualties use damage, distance, and defense")
     do $$$AssertEquals(result.attackerCasualties, 0, "A ranged defender does not retaliate")
+
+    set rangedContext.attacker.code = "ARCHERS", rangedContext.defender.code = "LIGHT_CAVALRY"
+    set rangedContext.defender.defense = 3
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(rangedContext)
+    do $$$AssertEquals(result.defenderDefenseModifier, 2, "Light cavalry gains two defense against projectiles")
+    do $$$AssertEquals(result.defenderEffectiveDefense, 5, "Light cavalry projectile defense is applied to ranged combat")
+
+    set cavalryContext = {
+        "attacker":{"code":"HEAVY_CAVALRY","strength":25,"morale":100,"attack":9,"defense":8,"damage":10},
+        "defender":{"code":"SPEARMEN","strength":100,"morale":100,"attack":5,"defense":6,"damage":7}
+    }
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(cavalryContext)
+    do $$$AssertEquals(result.defenderDefenseModifier, 2, "Spearmen gain two defense against cavalry")
+    do $$$AssertEquals(result.defenderEffectiveDefense, 8, "Spearmen cavalry defense is applied to melee combat")
+
+    set cavalryContext.attacker.code = "CHARIOTS"
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(cavalryContext)
+    do $$$AssertEquals(result.defenderDefenseModifier, 2, "Spearmen also gain two defense against chariots")
+
+    set modifierContext = {
+        "attacker":{"code":"SPEARMEN","strength":100,"morale":100,"attack":5,"attackModifier":3,"defense":6,"damage":7},
+        "defender":{"code":"HEAVY_CAVALRY","strength":25,"morale":100,"attack":9,"attackModifier":2,"defense":8,"damage":10}
+    }
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(modifierContext)
+    do $$$AssertEquals(result.attackerEffectiveAttack, 8, "The attacker matchup bonus is applied to melee attack")
+    do $$$AssertEquals(result.defenderEffectiveAttack, 11, "The defender matchup bonus is applied to melee retaliation")
+    do $$$AssertEquals(result.attackerAttackModifier, 3, "The attacker bonus is exposed in the combat result")
+
+    set positionContext = {
+        "attacker":{"side":"HUMAN","x":4,"y":4,"strength":100,"morale":100,"attack":5,"defense":5,"damage":5},
+        "defender":{"side":"AI","x":5,"y":4,"strength":100,"morale":100,"attack":5,"defense":5,"damage":5}
+    }
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(positionContext)
+    do $$$AssertEquals(result.attackDirection, "FLANK", "An attack from the defender's row is a flank attack")
+    do $$$AssertEquals(result.defenderPositionMoralePenalty, 10, "A flank attack applies ten points of morale penalty")
+    set positionContext.attacker.x = 5, positionContext.attacker.y = 3
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(positionContext)
+    do $$$AssertEquals(result.attackDirection, "REAR", "An AI unit attacked from the top is attacked from the rear")
+    do $$$AssertEquals(result.defenderPositionMoralePenalty, 10, "A rear attack applies ten points of morale penalty")
+    set positionContext.attacker.y = 5
+    set result = ##class(BronzeWars.Rules.Combat).Resolve(positionContext)
+    do $$$AssertEquals(result.attackDirection, "FRONT", "An AI unit attacked from below is attacked from the front")
+    do $$$AssertEquals(result.defenderPositionMoralePenalty, 0, "A frontal attack does not apply a positional morale penalty")
 }
 
 Method Test14AMoraleLossIsProportionalToInitialStrength()
@@ -355,6 +474,12 @@ Method Test15BattleSituationTool()
     do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(40), "normal", "Morale 40 is normal")
     do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(20), "low", "Morale 20 is low")
     do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(19), "very low", "Morale below 20 is very low")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).Classify(49, 50), "BAD", "Low morale and at least fifty percent casualties are unfavorable")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).RecommendedStrategy(49, 50), "REGROUP", "An unfavorable battle recommends regrouping")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).Classify(51, 49), "GOOD", "High morale and fewer than fifty percent casualties are favorable")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).RecommendedStrategy(51, 49), "ADVANCE", "A favorable battle recommends a general advance")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).Classify(50, 49), "NEUTRAL", "A boundary value of fifty morale retains tactical behavior")
+    do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).Classify(51, 50), "NEUTRAL", "Mixed indicators retain tactical behavior")
 
     set battle = ##class(BronzeWars.Model.Battle).%New()
     set battle.Name = "Battle situation tool test"
@@ -387,8 +512,11 @@ Method Test15BattleSituationTool()
     set secondUnitId = secondUnit.%Id()
 
     set situation = ##class(BronzeWars.AI.Tools.BattleSituation).GetBattleSituation(battleId)
+    do $$$AssertEquals(situation.averageMorale, 70, "The tool reports numeric average morale for threshold decisions")
     do $$$AssertEquals(situation.morale, "high", "The tool classifies the average active morale")
     do $$$AssertEquals(situation.casualtiesPercentage, 30, "The tool reports casualties against total initial strength")
+    do $$$AssertEquals(situation.battleState, "GOOD", "The tool classifies a favorable battle")
+    do $$$AssertEquals(situation.recommendedStrategy, "ADVANCE", "The tool recommends the strategy required by the thresholds")
 
     set situationToolSet = ##class(BronzeWars.AI.ToolSets.BattleSituation).%New()
     set toolManifest = situationToolSet.%Discover().%ToJSON()
@@ -440,7 +568,7 @@ Method NewValidUnitType(code As %String) As BronzeWars.Model.UnitType
     return unitType
 }
 
-Method AssertProfile(code As %String, faction As %String, speed As %Integer, attack As %Integer, defense As %Integer)
+Method AssertProfile(code As %String, faction As %String, speed As %Integer, attack As %Integer, defense As %Integer, grainCost As %Integer)
 {
     set unitType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen(code)
     set profile = ##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(unitType.%Id(), faction)
@@ -449,5 +577,6 @@ Method AssertProfile(code As %String, faction As %String, speed As %Integer, att
     do $$$AssertEquals(profile.Speed, speed, faction _ " speed matches")
     do $$$AssertEquals(profile.Attack, attack, faction _ " attack matches")
     do $$$AssertEquals(profile.Defense, defense, faction _ " defense matches")
+    do $$$AssertEquals(profile.GrainCost, grainCost, faction _ " grain cost matches")
 }
 }

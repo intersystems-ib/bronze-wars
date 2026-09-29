@@ -17,7 +17,9 @@ ClassMethod Build(battleId As %String, Output context As %DynamicObject) As %Sta
     if commanderType = "" set commanderType = ##class(BronzeWars.AI.Commanders.Strategy).#BALANCED
     &sql(SELECT MIN(PositionX), MAX(PositionX) INTO :humanMinX, :humanMaxX FROM BronzeWars_Model.BattleUnit WHERE Army = :humanArmyId AND Active = 1 AND IsDeployed = 1)
 
-    set context = {"battleId":(battleId),"round":(battle.CurrentRound),"commanderType":(commanderType),"commanderName":(##class(BronzeWars.AI.Commanders.Strategy).Label(commanderType)),"commanderDoctrine":(##class(BronzeWars.AI.Commanders.Strategy).Doctrine(commanderType)),"board":{"width":(battle.BoardWidth),"height":(battle.BoardHeight)},"humanFormation":{"minX":(humanMinX),"maxX":(humanMaxX)},"humanUnits":(##class(%DynamicArray).%New()),"aiUnits":(##class(%DynamicArray).%New())}
+    set situation = ##class(BronzeWars.AI.Tools.BattleSituation).GetBattleSituation(battleId)
+    if situation.%IsDefined("error") return $$$ERROR($$$GeneralError, situation.error)
+    set context = {"battleId":(battleId),"round":(battle.CurrentRound),"commanderType":(commanderType),"commanderName":(##class(BronzeWars.AI.Commanders.Strategy).Label(commanderType)),"commanderDoctrine":(##class(BronzeWars.AI.Commanders.Strategy).Doctrine(commanderType)),"battleSituation":(situation),"board":{"width":(battle.BoardWidth),"height":(battle.BoardHeight)},"humanFormation":{"minX":(humanMinX),"maxX":(humanMaxX)},"humanUnits":(##class(%DynamicArray).%New()),"aiUnits":(##class(%DynamicArray).%New())}
     for side = "HUMAN","AI" {
         set armyId = $select(side="HUMAN":humanArmyId, 1:aiArmyId)
         &sql(DECLARE MovementContextCursor CURSOR FOR SELECT %ID FROM BronzeWars_Model.BattleUnit WHERE Army = :armyId AND Active = 1 AND IsDeployed = 1 ORDER BY %ID)

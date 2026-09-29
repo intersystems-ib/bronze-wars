@@ -6,7 +6,7 @@ Parameter INVOCATION = "Queue";
 
 Method Handle(pRequest As BronzeWars.Message.Request, Output pResponse As BronzeWars.Message.Response) As %Status
 {
-    if (pRequest.Action '= "PLAN_AI_ARMY") && (pRequest.Action '= "PLAN_AI_DEPLOYMENT") {
+    if (pRequest.Action '= "PLAN_AI_ARMY") && (pRequest.Action '= "PLAN_AI_DEPLOYMENT") && (pRequest.Action '= "PLAN_AI_MOVEMENT") {
         set pResponse = ##class(BronzeWars.Message.Response).FromResult(##class(BronzeWars.Service.Result).Error(500, "UNSUPPORTED_ACTION", "La operacion de IA no admite esta accion."))
         return $$$OK
     }
@@ -14,6 +14,42 @@ Method Handle(pRequest As BronzeWars.Message.Request, Output pResponse As Bronze
     set result = ""
     try {
         set body = pRequest.Payload()
+        if pRequest.Action = "PLAN_AI_MOVEMENT" {
+            set model = ##class(BronzeWars.AI.Agent.Movement).#MODEL
+            set provider = ##class(BronzeWars.AI.Agent.Movement).CreateProvider()
+            set sc = provider.ValidateConfig()
+            if $SYSTEM.Status.IsError(sc) throw ##class(%Exception.StatusException).CreateFromStatus(sc)
+            set agent = ##class(BronzeWars.AI.Agent.Movement).%New(provider)
+            set sc = agent.UseToolSet("BronzeWars.AI.ToolSets.BattleSituation")
+            if $SYSTEM.Status.IsError(sc) throw ##class(%Exception.StatusException).CreateFromStatus(sc)
+            set session = agent.CreateSession({"model":(model)})
+            set response = agent.Run(session, body.%Get("goal"), body.%Get("max_iterations"))
+            set content = response.Content
+            set result = ##class(BronzeWars.Service.Result).Success(200, {"content":(content),"model":(model),"mode":"AGENT_TOOLSET"})
+            set pResponse = ##class(BronzeWars.Message.Response).FromResult(result)
+            return $$$OK
+        }
+        if pRequest.Action = "PLAN_AI_DEPLOYMENT" {
+            set model = ##class(BronzeWars.AI.Agent.Deployment).#MODEL
+            set provider = ##class(BronzeWars.AI.Agent.Deployment).CreateProvider()
+            set sc = provider.ValidateConfig()
+            if $SYSTEM.Status.IsError(sc) throw ##class(%Exception.StatusException).CreateFromStatus(sc)
+            set agent = ##class(BronzeWars.AI.Agent.Deployment).%New(provider)
+            set sc = agent.UseToolSet("BronzeWars.AI.ToolSets.DeploymentPositions")
+            if $SYSTEM.Status.IsError(sc) throw ##class(%Exception.StatusException).CreateFromStatus(sc)
+            set session = agent.CreateSession({"model":(model)})
+            set response = agent.Run(session, body.%Get("goal"), body.%Get("max_iterations"))
+            set content = response.Content
+            if '##class(BronzeWars.AI.DeploymentCommander).HasPlacementPayload(content) {
+                set correction = "La respuesta anterior no cumple el formato. Responde ahora exclusivamente con el JSON compacto de placements [[unitId,x,y],...] usando las recommendedOptions ya consultadas para las " _ body.unitIds.%Size() _ " unidades. No incluyas explicaciones ni vuelvas a consultar tools."
+                set response = agent.Chat(session, correction)
+                set content = response.Content
+            }
+            set result = ##class(BronzeWars.Service.Result).Success(200, {"content":(content),"model":(model),"mode":"AGENT_TOOLSET"})
+            set pResponse = ##class(BronzeWars.Message.Response).FromResult(result)
+            return $$$OK
+        }
+
         set model = ##class(BronzeWars.AI.Agent.Movement).#MODEL
 
         set provider = ##class(BronzeWars.AI.Agent.Movement).CreateProvider()

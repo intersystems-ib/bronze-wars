@@ -12,8 +12,8 @@ ClassMethod BuildRequest(context As %DynamicObject) As %DynamicObject
         do availableUnit.%Push(unitType.grainCost)
         do available.%Push(availableUnit)
     }
-    set doctrine = "Doctrina: " _ context.commanderDoctrine _ " Presupuesto exacto=" _ context.grainBudget _ ". Maximo unidades=" _ (context.board.width * 3) _ ". Minimo unidades de SPEARMEN, HEAVY_INFANTRY o MERCENARIES=" _ ..TargetLineLength(context) _ ". Tipos [codigo,coste]=" _ available.%ToJSON() _ "."
-    set format = "Devuelve {composition:[[codigo,cantidad],...]}. Cantidades enteras positivas, codigos sin repetir y suma coste*cantidad exactamente " _ context.grainBudget _ ". Si eres flanqueador incluye al menos dos unidades moviles: LIGHT_INFANTRY, LIGHT_CAVALRY, HEAVY_CAVALRY o CHARIOTS. No incluyas explicaciones."
+    set doctrine = "Doctrina: " _ context.commanderDoctrine _ " Presupuesto exacto=" _ context.grainBudget _ ". Maximo unidades=" _ ..MaxUnits(context) _ ". Minimo unidades de SPEARMEN, HEAVY_INFANTRY o MERCENARIES=" _ ..TargetLineLength(context) _ ". Tipos [codigo,coste]=" _ available.%ToJSON() _ "."
+    set format = "Devuelve {composition:[[codigo,cantidad],...]}. Cantidades enteras positivas, codigos sin repetir y suma coste*cantidad exactamente " _ context.grainBudget _ ". Usa al menos 3 tipos y ningun tipo puede superar la mitad de las unidades. Si eres escaramuceador incluye ARCHERS, LIGHT_INFANTRY y LIGHT_CAVALRY. Si eres flanqueador incluye al menos dos unidades moviles: LIGHT_INFANTRY, LIGHT_CAVALRY, HEAVY_CAVALRY o CHARIOTS. No incluyas explicaciones."
 
     set codes = ##class(%DynamicArray).%New()
     for index = 0:1:(context.unitTypes.%Size() - 1) do codes.%Push(context.unitTypes.%Get(index).code)
@@ -27,7 +27,7 @@ ClassMethod BuildCorrectionRequest(context As %DynamicObject, invalidContent As 
 {
     set request = ..BuildRequest(context)
     do request.messages.%Push({"role":"assistant","content":(invalidContent)})
-    set correction = "La propuesta anterior no es valida: " _ validationError _ ". Recalcula las cantidades. Debes gastar exactamente 100 medidas, no asignar porcentajes. El maximo es " _ (context.board.width * 3) _ " unidades. Comprueba explicitamente cada quantity * grainCost y devuelve unicamente el objeto JSON corregido."
+    set correction = "La propuesta anterior no es valida: " _ validationError _ ". Recalcula las cantidades. Debes gastar exactamente 100 medidas, no asignar porcentajes. El maximo es " _ ..MaxUnits(context) _ " unidades, con al menos 3 tipos y sin que uno supere la mitad del total. Comprueba explicitamente cada quantity * grainCost y devuelve unicamente el objeto JSON corregido."
     do request.messages.%Push({"role":"user","content":(correction)})
     return request
 }
@@ -62,11 +62,11 @@ ClassMethod ParseAndValidate(content As %String, context As %DynamicObject, Outp
             if (quantityType '= "number") ! (quantity < 1) ! (quantity '= (quantity \ 1)) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "Invalid quantity in AI composition"))
             set seen(code) = 1
             set totalGrain = totalGrain + (costs(code) * quantity), totalUnits = totalUnits + quantity
-            if ##class(BronzeWars.Rules.FormationMorale).IsSupportedUnitCode(code), (code '= "LIGHT_INFANTRY") set lineUnits = lineUnits + quantity
+            if ##class(BronzeWars.AI.DeploymentCommander).IsMainLineCode(code) set lineUnits = lineUnits + quantity
             do composition.%Push({"code":(code),"quantity":(quantity)})
         }
         if totalGrain '= context.grainBudget throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "AI composition must spend the complete grain budget"))
-        if totalUnits > (context.board.width * 3) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "AI composition does not fit in the deployment zone"))
+        if totalUnits > ..MaxUnits(context) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "AI composition exceeds the fourteen-unit limit"))
         if lineUnits < ..TargetLineLength(context) throw ##class(%Exception.StatusException).CreateFromStatus($$$ERROR($$$GeneralError, "AI composition does not contain enough infantry or spearmen for the required front"))
         set sc = ##class(BronzeWars.AI.Commanders.Strategy).ValidateComposition(context.commanderType, composition)
         if $SYSTEM.Status.IsError(sc) throw ##class(%Exception.StatusException).CreateFromStatus(sc)
@@ -74,6 +74,13 @@ ClassMethod ParseAndValidate(content As %String, context As %DynamicObject, Outp
         set result = exception.AsStatus()
     }
     return result
+}
+
+ClassMethod MaxUnits(context As %DynamicObject) As %Integer
+{
+    set capacity = context.board.width * 3
+    if capacity > ##class(BronzeWars.Rules.ArmyBudget).#AIMaxUnits set capacity = ##class(BronzeWars.Rules.ArmyBudget).#AIMaxUnits
+    return capacity
 }
 
 ClassMethod TargetLineLength(context As %DynamicObject) As %Integer
