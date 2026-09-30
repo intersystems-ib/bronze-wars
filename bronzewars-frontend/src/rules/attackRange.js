@@ -27,7 +27,7 @@ export function hasUnitAttacked(unit) {
 
 export function getAttackTargetIds(selectedUnit, armies) {
   const targets = new Set();
-  if (!selectedUnit?.position || selectedUnit.side !== 'HUMAN' || selectedUnit.active === false || Number(selectedUnit.active) === 0 || hasUnitAttacked(selectedUnit)) return targets;
+  if (!selectedUnit?.position || selectedUnit.side !== 'HUMAN' || selectedUnit.active === false || Number(selectedUnit.active) === 0 || Number(selectedUnit.morale) <= 20 || hasUnitAttacked(selectedUnit)) return targets;
 
   armies.forEach((army) => {
     if (army.side === selectedUnit.side) return;

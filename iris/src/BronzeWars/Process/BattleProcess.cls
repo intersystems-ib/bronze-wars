@@ -1,7 +1,7 @@
 Class BronzeWars.Process.BattleProcess Extends BronzeWars.Process.BaseProcess
 {
 
-Parameter ALLOWEDACTIONS = "CREATE_BATTLE,GET_BATTLE,START_BATTLE,MOVE_UNIT,ATTACK_UNIT,NEXT_TURN";
+Parameter ALLOWEDACTIONS = "CREATE_BATTLE,GET_BATTLE,START_BATTLE,MOVE_UNIT,ATTACK_UNIT,NEXT_TURN,PREPARE_HUMAN_TURN,SURRENDER_BATTLE";
 
 Method OnRequest(request As BronzeWars.Message.Request, Output response As BronzeWars.Message.Response) As %Status
 {
@@ -11,7 +11,7 @@ Method OnRequest(request As BronzeWars.Message.Request, Output response As Bronz
     if request.Action = "CREATE_BATTLE" {
         if 'payload.%IsDefined("name") do payload.%Set("name", "Batalla BronzeWars")
         if payload.%IsDefined("name"), (payload.name = "") do payload.%Set("name", "Batalla BronzeWars")
-        if 'payload.%IsDefined("boardWidth") do payload.%Set("boardWidth", 16)
+        if 'payload.%IsDefined("boardWidth") do payload.%Set("boardWidth", 15)
         if 'payload.%IsDefined("boardHeight") do payload.%Set("boardHeight", 12)
         if 'payload.%IsDefined("faction") do payload.%Set("faction", "EGYPTIAN")
         set payload.faction = $zconvert(payload.faction, "U")

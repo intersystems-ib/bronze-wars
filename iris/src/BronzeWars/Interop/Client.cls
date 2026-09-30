@@ -69,4 +69,9 @@ ClassMethod NextTurn(battleId As %String, confirmIncomplete As %Boolean = 0) As 
     return ..Invoke("Battle Service", "NEXT_TURN", {"battleId":(battleId),"confirmIncomplete":(confirmIncomplete)})
 }
 
+ClassMethod SurrenderBattle(battleId As %String) As %DynamicObject
+{
+    return ..Invoke("Battle Service", "SURRENDER_BATTLE", {"battleId":(battleId),"side":"HUMAN"})
+}
+
 }

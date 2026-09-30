@@ -23,8 +23,11 @@ Method Test01CreateBattle()
     do $$$AssertEquals(battle.status, "CREATED", "Initial status is CREATED")
     do $$$AssertEquals(battle.phase, "DEPLOYMENT", "Initial phase is DEPLOYMENT")
     do $$$AssertEquals(battle.currentRound, 0, "Initial round is zero")
-    do $$$AssertEquals(battle.board.width, 16, "Default board width is 16")
+    do $$$AssertEquals(battle.board.width, 15, "Default board width is 15")
     do $$$AssertEquals(battle.board.height, 12, "Default board height is 12")
+    do $$$AssertTrue((battle.terrain = "DESERT") || (battle.terrain = "PLAINS"), "A supported terrain is chosen for the battle")
+    set storedBattle = ##class(BronzeWars.Model.Battle).%OpenId(battle.id)
+    do $$$AssertEquals(storedBattle.Terrain, battle.terrain, "The chosen terrain is persisted")
     do $$$AssertEquals(battle.armies.%Size(), 2, "Two armies are created")
     do $$$AssertEquals(battle.armies.%Get(0).units.%Size(), 10, "Human army uses the default ten-unit composition")
     do $$$AssertEquals(battle.armies.%Get(1).units.%Size(), 0, "AI composition remains hidden and undecided during human deployment")
@@ -138,10 +141,22 @@ Method Test03StartAndRollback()
     set pendingTurn = ##class(BronzeWars.Interop.Client).NextTurn(battleId)
     do $$$AssertEquals(pendingTurn.code, "UNITS_PENDING_MOVEMENT", "Advancing warns when units have not moved")
     do $$$AssertEquals(pendingTurn.details.pendingUnits, human.units.%Size() - 1, "The warning reports pending human units")
+    set recoveryUnitId = human.units.%Get(0).id
+    set recoveryUnit = ##class(BronzeWars.Model.BattleUnit).%OpenId(recoveryUnitId)
+    set recoveryUnit.CurrentStrength = recoveryUnit.UnitProfile.InitialStrength / 2
+    set recoveryUnit.Morale = 60
+    set sc = recoveryUnit.%Save()
+    do $$$AssertStatusOK(sc, "A damaged unit can be prepared in its home zone")
     &sql(SELECT COUNT(*) INTO :situationToolCallsBefore FROM BronzeWars_AI_Audit.ToolExecution WHERE ToolName = 'GetBattleSituation')
     set advancedTurn = ##class(BronzeWars.Interop.Client).NextTurn(battleId, 1)
     do $$$AssertTrue(advancedTurn.ok, "The turn can be advanced after confirmation")
     do $$$AssertEquals(advancedTurn.data.battle.currentRound, 2, "Advancing starts the next round")
+    do recoveryUnit.%Reload()
+    do $$$AssertEquals(recoveryUnit.Morale, 70, "A half-strength unit recovers ten morale after a round in its home zone")
+    do $$$AssertEquals(advancedTurn.data.moraleRecoveryTrace.%Size(), 1, "The turn response reports the morale recovery")
+    do $$$AssertEquals(advancedTurn.data.moraleRecoveryTrace.%Get(0).unitId, recoveryUnitId, "The morale recovery identifies the affected unit")
+    &sql(SELECT COUNT(*) INTO :recoveryEvents FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND ActorUnit = :recoveryUnitId AND EventType = 'MORALE_RECOVERED')
+    do $$$AssertEquals(recoveryEvents, 1, "The morale recovery is recorded as a battle event")
     &sql(SELECT COUNT(*) INTO :situationToolCallsAfter FROM BronzeWars_AI_Audit.ToolExecution WHERE ToolName = 'GetBattleSituation')
     do $$$AssertTrue(situationToolCallsAfter > situationToolCallsBefore, "The movement agent invokes and audits GetBattleSituation during the turn decision")
     &sql(SELECT COUNT(*) INTO :aiMovementPlans FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND EventType = 'AI_MOVEMENT_PLANNED')
@@ -317,6 +332,12 @@ Method Test05AdjacentMeleeCombat()
     set expectedFlankMorale = defenderMoraleBeforeFlank - ##class(BronzeWars.Rules.Morale).LossForCasualties(storedDefender, flankResult.data.combat.defenderCasualties) - 10
     if expectedFlankMorale < 0 set expectedFlankMorale = 0
     do $$$AssertEquals(storedDefender.Morale, expectedFlankMorale, "Every flank attack removes ten additional morale points")
+
+    set attacker.Morale = 20, attacker.HasAttacked = 0
+    set sc = attacker.%Save()
+    do $$$AssertStatusOK(sc, "A low-morale attacker can be prepared")
+    set lowMoraleAttack = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, attacker.%Id(), defender.%Id())
+    do $$$AssertEquals(lowMoraleAttack.code, "LOW_MORALE_CANNOT_ATTACK", "A unit at twenty morale cannot launch an attack")
 }
 
 Method Test06LowMoraleUnitRetreatsAroundObstacles()
@@ -464,6 +485,163 @@ Method Test08AIAdjacentMeleeCombat()
     do $$$AssertEquals(defender.CurrentStrength, defenderStrengthBefore - combat.defenderCasualties, "Human defender casualties are persisted")
     do $$$AssertEquals(attacker.Morale, 80 - combat.attackerCasualties, "AI attacker casualties reduce its morale")
     do $$$AssertEquals(defender.Morale, 80 - combat.defenderCasualties, "Human defender casualties reduce its morale")
+}
+
+Method Test09AILowMoraleWithdrawal()
+{
+    set battleJSON = ..CreateBattle("AI low morale withdrawal test"), battleId = battleJSON.id
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
+    do $$$AssertStatusOK(sc, "Low-morale AI battle can be opened")
+    set battle.Status = "IN_PROGRESS", battle.Phase = "MOVEMENT", battle.CurrentRound = 1
+    set sc = battle.%Save()
+    do $$$AssertStatusOK(sc, "Low-morale AI fixture can be started")
+
+    set human = ##class(BronzeWars.Model.BattleUnit).%OpenId(battleJSON.armies.%Get(0).units.%Get(0).id)
+    set human.PositionX = 5, human.PositionY = 5, human.IsDeployed = 1, human.HasMoved = 1
+    set sc = human.%Save()
+    do $$$AssertStatusOK(sc, "The human target can be prepared")
+
+    set aiArmy = ..FindArmy(battleId, "AI")
+    set unitType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_INFANTRY")
+    set unitProfile = ##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(unitType.%Id(), aiArmy.Faction)
+
+    set retreating = ##class(BronzeWars.Model.BattleUnit).%New(unitType, unitProfile)
+    set retreating.Battle = battle, retreating.Army = aiArmy, retreating.Name = "Low morale retreating unit"
+    set retreating.PositionX = 4, retreating.PositionY = 4, retreating.IsDeployed = 1, retreating.Morale = 20, retreating.CurrentStrength = 50
+    set sc = retreating.%Save()
+    do $$$AssertStatusOK(sc, "A low-morale AI unit can be prepared away from home")
+
+    set withdrawing = ##class(BronzeWars.Model.BattleUnit).%New(unitType, unitProfile)
+    set withdrawing.Battle = battle, withdrawing.Army = aiArmy, withdrawing.Name = "Critically depleted withdrawing unit"
+    set withdrawing.PositionX = 8, withdrawing.PositionY = 1, withdrawing.IsDeployed = 1, withdrawing.Morale = 20, withdrawing.CurrentStrength = 33
+    set sc = withdrawing.%Save()
+    do $$$AssertStatusOK(sc, "A critically depleted AI unit can be prepared near its edge")
+
+    set result = ##class(BronzeWars.Interop.Client).NextTurn(battleId, 1)
+    do $$$AssertTrue($isobject(result), "The low-morale AI turn returns a structured response")
+    if '$isobject(result) return
+    do $$$AssertTrue(result.ok, "The low-morale AI turn completes")
+    if 'result.ok {
+        do $$$LogMessage("Low-morale turn response: " _ result.%ToJSON())
+        return
+    }
+    do $$$AssertEquals(result.data.aiCombatTrace.%Size(), 0, "Low-morale AI units launch no attacks")
+
+    do retreating.%Reload()
+    do withdrawing.%Reload()
+    do $$$AssertEquals(retreating.PositionY, 3, "A low-morale AI unit retreats toward its home rows")
+    do $$$AssertTrue(retreating.Active, "A unit above one-third strength remains in battle while retreating")
+    do $$$AssertEquals(withdrawing.PositionY, 0, "A critically depleted unit reaches the first AI row")
+    do $$$AssertNotTrue(withdrawing.Active, "A critically depleted unit leaves the battle at the first row")
+    do $$$AssertNotTrue(withdrawing.IsDeployed, "A withdrawn unit disappears from the battlefield")
+    set withdrawingId = withdrawing.%Id()
+    &sql(SELECT COUNT(*) INTO :withdrawalEvents FROM BronzeWars_Model.BattleEvent WHERE Battle = :battleId AND ActorUnit = :withdrawingId AND EventType = 'UNIT_WITHDREW')
+    do $$$AssertEquals(withdrawalEvents, 1, "The withdrawal is recorded as a battle event")
+}
+
+Method Test10AISurrendersAfterShock()
+{
+    set battleJSON = ..CreateBattle("AI surrender after shock test"), battleId = battleJSON.id
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
+    do $$$AssertStatusOK(sc, "AI surrender battle can be opened")
+    set battle.Status = "IN_PROGRESS", battle.Phase = "MOVEMENT", battle.CurrentRound = 1
+    set sc = battle.%Save()
+    do $$$AssertStatusOK(sc, "AI surrender fixture can be started")
+
+    set attacker = ##class(BronzeWars.Model.BattleUnit).%OpenId(battleJSON.armies.%Get(0).units.%Get(0).id)
+    set attacker.PositionX = 5, attacker.PositionY = 5, attacker.IsDeployed = 1
+    set sc = attacker.%Save()
+    do $$$AssertStatusOK(sc, "Surrender test attacker can be prepared")
+
+    set aiArmy = ..FindArmy(battleId, "AI")
+    set unitType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_INFANTRY")
+    set unitProfile = ##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(unitType.%Id(), aiArmy.Faction)
+    set defender = ##class(BronzeWars.Model.BattleUnit).%New(unitType, unitProfile)
+    set defender.Battle = battle, defender.Army = aiArmy, defender.Name = "Critical morale defender"
+    set defender.PositionX = 5, defender.PositionY = 4, defender.IsDeployed = 1, defender.Morale = 10
+    set sc = defender.%Save()
+    do $$$AssertStatusOK(sc, "Critical morale AI defender can be prepared")
+
+    set result = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, attacker.%Id(), defender.%Id())
+    do $$$AssertTrue(result.ok, "The shock that triggers AI surrender completes")
+    do $$$AssertTrue(result.data.surrenderEvaluation.surrendered, "AI surrender is evaluated after the shock")
+    do $$$AssertEquals(result.data.surrenderEvaluation.reason, "CRITICAL_MORALE", "Critical morale ends the battle")
+    do $$$AssertEquals(result.data.battle.status, "FINISHED", "AI surrender finishes the battle")
+    do $$$AssertEquals(result.data.battle.finishReason, "SURRENDER", "The finish reason is persisted as surrender")
+    do $$$AssertTrue(result.data.battle.armies.%Get(0).winner, "The human army is marked as winner")
+    do $$$AssertTrue(result.data.battle.outcome.armies.%Get(1).prisoners > 0, "Surviving AI soldiers are counted as prisoners")
+
+    set blockedMove = ##class(BronzeWars.Interop.Client).MoveUnit(battleId, attacker.%Id(), 5, 6)
+    do $$$AssertEquals(blockedMove.code, "INVALID_BATTLE_PHASE", "No movement is allowed after surrender")
+    set blockedAttack = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, attacker.%Id(), defender.%Id())
+    do $$$AssertEquals(blockedAttack.code, "INVALID_BATTLE_PHASE", "No attack is allowed after surrender")
+}
+
+Method Test11PlayerSurrender()
+{
+    set battleJSON = ..CreateBattle("Player surrender test"), battleId = battleJSON.id
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
+    set battle.Status = "IN_PROGRESS", battle.Phase = "MOVEMENT", battle.CurrentRound = 1
+    set sc = battle.%Save()
+    do $$$AssertStatusOK(sc, "Player surrender fixture can be started")
+
+    set result = ##class(BronzeWars.Interop.Client).SurrenderBattle(battleId)
+    do $$$AssertTrue(result.ok, "The player can surrender through the production")
+    do $$$AssertEquals(result.data.battle.status, "FINISHED", "Player surrender finishes the battle")
+    do $$$AssertEquals(result.data.battle.finishReason, "SURRENDER", "Player surrender persists its finish reason")
+    do $$$AssertEquals(result.data.battle.outcome.armies.%Get(0).side, "HUMAN", "The outcome contains the human summary")
+    do $$$AssertTrue(result.data.battle.outcome.armies.%Get(1).winner, "The AI army wins after player surrender")
+    do $$$AssertTrue(result.data.battle.outcome.armies.%Get(0).prisoners > 0, "The player's surviving soldiers become prisoners")
+}
+
+Method Test12HumanLowMoraleRetreatAndRecovery()
+{
+    set battleJSON = ..CreateBattle("Human morale retreat test"), battleId = battleJSON.id
+    set human = battleJSON.armies.%Get(0)
+    for index = 0:1:(human.units.%Size()-1) {
+        set placed = ##class(BronzeWars.Interop.Client).PlaceUnit(battleId, human.units.%Get(index).id, index, 9)
+        do $$$AssertTrue(placed.ok, "The human retreat fixture can be deployed")
+    }
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId)
+    set battle.Status = "IN_PROGRESS", battle.Phase = "MOVEMENT", battle.CurrentRound = 1
+    set sc = battle.%Save()
+    do $$$AssertStatusOK(sc, "The human retreat fixture can be started")
+    set retreating = ##class(BronzeWars.Model.BattleUnit).%OpenId(human.units.%Get(human.units.%Size()-1).id)
+    set retreating.PositionX = 14, retreating.PositionY = 8, retreating.Morale = 5
+    set sc = retreating.%Save()
+    do $$$AssertStatusOK(sc, "A low-morale human unit can be prepared outside its home zone")
+    set retreatingId = retreating.%Id(), retreatingSpeed = retreating.UnitProfile.Speed
+
+    set recovering = ##class(BronzeWars.Model.BattleUnit).%OpenId(human.units.%Get(0).id)
+    set recovering.Morale = 5
+    set sc = recovering.%Save()
+    do $$$AssertStatusOK(sc, "A low-morale human unit can be prepared inside its home zone")
+
+    set manualMove = ##class(BronzeWars.Interop.Client).MoveUnit(battleId, retreatingId, 14, 9)
+    do $$$AssertEquals(manualMove.code, "LOW_MORALE_MUST_RETREAT", "A fleeing human unit cannot be moved manually")
+
+    set firstTurn = ##class(BronzeWars.Interop.Client).Invoke("Battle Service", "PREPARE_HUMAN_TURN", {"battleId":(battleId)})
+    do $$$AssertTrue(firstTurn.ok, "The human turn applies morale recovery and forced retreats")
+    if 'firstTurn.ok return
+    do $$$AssertEquals(firstTurn.data.humanRetreatTrace.%Size(), 1, "The turn reports the forced human retreat")
+    do $$$AssertEquals(firstTurn.data.humanRetreatTrace.%Get(0).unitId, retreatingId, "The retreat trace identifies the fleeing human unit")
+
+    do retreating.%Reload()
+    do recovering.%Reload()
+    do $$$AssertTrue(retreating.PositionY >= 9, "The fleeing human unit advances toward its first row")
+    do $$$AssertTrue(retreating.HasMoved, "The forced retreat consumes the human unit's action")
+    do $$$AssertEquals(retreating.MovementSpent, retreatingSpeed, "The forced retreat exhausts all available movement")
+    do $$$AssertEquals(recovering.Morale, 25, "Home-zone recovery raises morale before forced retreats are selected")
+    do $$$AssertNotTrue(recovering.HasMoved, "A unit recovered above twenty morale remains under player control")
+
+    set secondTurn = ##class(BronzeWars.Interop.Client).Invoke("Battle Service", "PREPARE_HUMAN_TURN", {"battleId":(battleId)})
+    do $$$AssertTrue(secondTurn.ok, "The next human turn applies recovery before deciding whether to keep fleeing")
+    if 'secondTurn.ok return
+    do $$$AssertEquals(secondTurn.data.humanRetreatTrace.%Size(), 0, "A unit recovered above twenty morale no longer retreats")
+    do retreating.%Reload()
+    do $$$AssertTrue(retreating.Morale > 20, "The fleeing unit recovers above the critical morale threshold")
+    do $$$AssertNotTrue(retreating.HasMoved, "A recovered human unit returns to player control")
+    do $$$AssertEquals(retreating.MovementSpent, 0, "A recovered human unit regains all movement")
 }
 
 Method CreateBattle(name As %String) As %DynamicObject

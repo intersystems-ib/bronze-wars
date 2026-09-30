@@ -8,6 +8,9 @@ Property Name As %String(MAXLEN = 100) [ Required ];
 Property Side As %String(VALUELIST = ",HUMAN,AI") [ Required ];
 Property Faction As %String(VALUELIST = ",EGYPTIAN,ASSYRIAN") [ Required ];
 Property CommanderType As %String(VALUELIST = ",DEFENSIVE,AGGRESSIVE,SKIRMISHER,FLANKER,BALANCED");
+Property SurrenderPressureTurns As %Integer(MINVAL = 0) [ InitialExpression = 0, Required ];
+Property SurrenderPressureRound As %Integer(MINVAL = 0);
+Property Winner As %Boolean [ InitialExpression = 0, Required ];
 Property Active As %Boolean [ InitialExpression = 1, Required ];
 Relationship Units As BronzeWars.Model.BattleUnit [ Cardinality = many, Inverse = Army ];
 

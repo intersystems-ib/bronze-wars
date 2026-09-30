@@ -45,4 +45,5 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ confirmIncomplete }),
   }),
+  surrenderBattle: (battleId) => request(`/battles/${battleId}/surrender`, { method: 'POST' }),
 };

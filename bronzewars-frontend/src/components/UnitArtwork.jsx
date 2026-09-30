@@ -1,9 +1,15 @@
-import { getUnitArtwork, getUnitArtworkForFaction } from '../config/armyDesigns';
+import {
+  getBattlefieldUnitArtwork,
+  getBattlefieldUnitArtworkForFaction,
+  getUnitArtwork,
+  getUnitArtworkForFaction,
+} from '../config/armyDesigns';
 
-export default function UnitArtwork({ unitCode, armyDesignId, faction, className = '', alt = '', loading = 'lazy' }) {
+export default function UnitArtwork({ unitCode, armyDesignId, faction, variant = 'menu', className = '', alt = '', loading = 'lazy' }) {
+  const battlefield = variant === 'battlefield';
   const source = faction
-    ? getUnitArtworkForFaction(unitCode, faction)
-    : getUnitArtwork(unitCode, armyDesignId);
+    ? (battlefield ? getBattlefieldUnitArtworkForFaction(unitCode, faction) : getUnitArtworkForFaction(unitCode, faction))
+    : (battlefield ? getBattlefieldUnitArtwork(unitCode, armyDesignId) : getUnitArtwork(unitCode, armyDesignId));
 
   if (!source) return null;
 

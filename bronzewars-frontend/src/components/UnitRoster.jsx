@@ -33,6 +33,10 @@ export default function UnitRoster({ army, selectedUnitId, disabled, onSelect, o
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = 'move';
                 event.dataTransfer.setData('text/plain', String(unit.id));
+                const dragImage = event.currentTarget.querySelector('.roster-unit__drag-preview');
+                if (dragImage) {
+                  event.dataTransfer.setDragImage(dragImage, dragImage.clientWidth / 2, dragImage.clientHeight / 2);
+                }
                 onSelect(unit);
                 onDragStart(unit.id);
               }}
@@ -40,6 +44,15 @@ export default function UnitRoster({ army, selectedUnitId, disabled, onSelect, o
             >
               <span className="roster-unit__mark">
                 <UnitArtwork unitCode={unit.type.code} faction={army?.faction} alt="" />
+              </span>
+              <span className="roster-unit__drag-preview" aria-hidden="true">
+                <UnitArtwork
+                  unitCode={unit.type.code}
+                  faction={army?.faction}
+                  variant="battlefield"
+                  alt=""
+                  loading="eager"
+                />
               </span>
               <span className="roster-unit__body">
                 <strong>{unit.type.name}</strong>

@@ -8,7 +8,7 @@ import UnitArtwork from './UnitArtwork';
 export default function BattleSetup({ unitTypes, loadingUnitTypes, armyDesignId, busy, onArmyDesignChange, onCreate }) {
   const { t } = useI18n();
   const [name, setName] = useState('');
-  const [width, setWidth] = useState(16);
+  const [width, setWidth] = useState(15);
   const [height, setHeight] = useState(12);
   const [quantities, setQuantities] = useState(DEFAULT_ARMY_QUANTITIES);
   const selectedArmyIndex = Math.max(0, ARMY_DESIGNS.findIndex((design) => design.id === armyDesignId));

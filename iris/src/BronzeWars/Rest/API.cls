@@ -16,6 +16,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
     <Route Url="/battles/:battleId/units/:unitId/attack/:targetUnitId" Method="POST" Call="AttackUnit" />
     <Route Url="/battles/:battleId/start" Method="POST" Call="StartBattle" />
     <Route Url="/battles/:battleId/next-turn" Method="POST" Call="NextTurn" />
+    <Route Url="/battles/:battleId/surrender" Method="POST" Call="SurrenderBattle" />
 </Routes>
 }
 
@@ -117,6 +118,12 @@ ClassMethod NextTurn(battleId As %String) As %Status
         return $$$OK
     }
     do ..WriteResult(##class(BronzeWars.Interop.Client).NextTurn(battleId, input.confirmIncomplete))
+    return $$$OK
+}
+
+ClassMethod SurrenderBattle(battleId As %String) As %Status
+{
+    do ..WriteResult(##class(BronzeWars.Interop.Client).SurrenderBattle(battleId))
     return $$$OK
 }
 

@@ -465,9 +465,66 @@ Method Test14AMoraleLossIsProportionalToInitialStrength()
     set cavalryType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("LIGHT_CAVALRY")
     set cavalry = ##class(BronzeWars.Model.BattleUnit).%New(cavalryType)
     do $$$AssertEquals(##class(BronzeWars.Rules.Morale).LossForCasualties(cavalry, 3), 10, "Three casualties cost ten morale points in a 30-strength unit")
+
+    set infantry.CurrentStrength = 100
+    do $$$AssertEquals(##class(BronzeWars.Rules.Morale).RecoveryForStrength(infantry), 20, "A unit at full strength recovers twenty morale in its home zone")
+    set infantry.CurrentStrength = 50
+    do $$$AssertEquals(##class(BronzeWars.Rules.Morale).RecoveryForStrength(infantry), 10, "A unit at half strength recovers ten morale in its home zone")
+    set infantry.CurrentStrength = 25
+    do $$$AssertEquals(##class(BronzeWars.Rules.Morale).RecoveryForStrength(infantry), 5, "Morale recovery remains proportional to current strength")
+    set infantry.Morale = 20
+    do $$$AssertNotTrue(##class(BronzeWars.Rules.Morale).CanAttack(infantry), "A unit at twenty morale cannot attack")
+    set infantry.Morale = 21
+    do $$$AssertTrue(##class(BronzeWars.Rules.Morale).CanAttack(infantry), "A unit above twenty morale can attack")
+    set infantry.CurrentStrength = 33
+    do $$$AssertTrue(##class(BronzeWars.Rules.Morale).IsCriticallyDepleted(infantry), "A unit at one third strength is critically depleted")
+    set infantry.CurrentStrength = 34
+    do $$$AssertNotTrue(##class(BronzeWars.Rules.Morale).IsCriticallyDepleted(infantry), "A unit above one third strength is not critically depleted")
 }
 
-Method Test15BattleSituationTool()
+Method Test15SurrenderRules()
+{
+    set result = ##class(BronzeWars.Rules.Surrender).Evaluate(10, 100, 100, 0)
+    do $$$AssertTrue(result.surrendered, "Morale ten causes immediate surrender")
+    do $$$AssertEquals(result.reason, "CRITICAL_MORALE", "Critical morale reports its reason")
+
+    set result = ##class(BronzeWars.Rules.Surrender).Evaluate(11, 100, 100, 0)
+    do $$$AssertNotTrue(result.surrendered, "Morale eleven does not cause immediate surrender")
+
+    set firstTurn = ##class(BronzeWars.Rules.Surrender).Evaluate(25, 40, 100, 0)
+    do $$$AssertNotTrue(firstTurn.surrendered, "One disadvantaged turn does not cause surrender")
+    do $$$AssertEquals(firstTurn.surrenderPressureTurns, 1, "The first disadvantaged turn raises pressure to one")
+    do $$$AssertEquals(firstTurn.relativeStrength, .4, "Relative strength is calculated from surviving soldiers")
+
+    set secondTurn = ##class(BronzeWars.Rules.Surrender).Evaluate(25, 40, 100, firstTurn.surrenderPressureTurns)
+    do $$$AssertTrue(secondTurn.surrendered, "Two consecutive disadvantaged turns cause surrender")
+    do $$$AssertEquals(secondTurn.reason, "SUSTAINED_DISADVANTAGE", "Sustained disadvantage reports its reason")
+
+    set recovered = ##class(BronzeWars.Rules.Surrender).Evaluate(50, 40, 100, firstTurn.surrenderPressureTurns)
+    do $$$AssertEquals(recovered.surrenderPressureTurns, 0, "Recovery between turns resets surrender pressure")
+
+    set parity = ##class(BronzeWars.Rules.Surrender).Evaluate(25, 90, 100, 1)
+    do $$$AssertNotTrue(parity.surrendered, "An army at ninety percent relative strength cannot surrender normally")
+    do $$$AssertEquals(parity.surrenderPressureTurns, 0, "Relative parity resets surrender pressure")
+
+    set criticalWithAdvantage = ##class(BronzeWars.Rules.Surrender).Evaluate(8, 120, 100, 0)
+    do $$$AssertTrue(criticalWithAdvantage.surrendered, "Critical morale overrides a strength advantage")
+
+    set enemyDefeated = ##class(BronzeWars.Rules.Surrender).Evaluate(8, 100, 0, 1)
+    do $$$AssertNotTrue(enemyDefeated.surrendered, "An army does not surrender after defeating every enemy soldier")
+    do $$$AssertEquals(enemyDefeated.surrenderPressureTurns, 0, "Victory clears surrender pressure")
+
+    set units = [{"morale":0,"soldiers":0},{"morale":80,"soldiers":20}]
+    set metrics = ##class(BronzeWars.Rules.Surrender).Metrics(units)
+    do $$$AssertEquals(metrics.survivingSoldiers, 20, "Units without soldiers are excluded from surrender metrics")
+    do $$$AssertEquals(metrics.armyMorale, 80, "Units without soldiers do not affect average morale")
+
+    set weightedUnits = [{"morale":100,"soldiers":90},{"morale":0,"soldiers":10}]
+    set weightedMetrics = ##class(BronzeWars.Rules.Surrender).Metrics(weightedUnits)
+    do $$$AssertEquals(weightedMetrics.armyMorale, 90, "Weighted morale gives more weight to units with more survivors")
+}
+
+Method Test16BattleSituationTool()
 {
     do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(80), "very high", "Morale 80 is very high")
     do $$$AssertEquals(##class(BronzeWars.AI.Tools.BattleSituation).DescribeMorale(60), "high", "Morale 60 is high")

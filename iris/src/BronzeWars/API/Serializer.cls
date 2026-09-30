@@ -79,7 +79,7 @@ ClassMethod BattleUnit(unit As BronzeWars.Model.BattleUnit, hidePosition As %Boo
 
 ClassMethod Army(army As BronzeWars.Model.Army, hidePositions As %Boolean = 0) As %DynamicObject
 {
-    set value = {"id":(army.%Id()),"side":(army.Side),"faction":(army.Faction),"name":(army.Name),"units":(##class(%DynamicArray).%New())}
+    set value = {"id":(army.%Id()),"side":(army.Side),"faction":(army.Faction),"name":(army.Name),"surrenderPressureTurns":(army.SurrenderPressureTurns),"winner":(army.Winner),"units":(##class(%DynamicArray).%New())}
     if army.CommanderType = "" {
         do value.%Set("commanderType", "", "null")
         do value.%Set("commanderName", "", "null")
@@ -102,11 +102,14 @@ ClassMethod Army(army As BronzeWars.Model.Army, hidePositions As %Boolean = 0) A
 
 ClassMethod Battle(battle As BronzeWars.Model.Battle, hideAIPositions As %Boolean = 0) As %DynamicObject
 {
-    set value = {"id":(battle.%Id()),"name":(battle.Name),"status":(battle.Status),"phase":(battle.Phase),"currentRound":(battle.CurrentRound),"createdAt":(..Timestamp(battle.CreatedAt)),"board":{"width":(battle.BoardWidth),"height":(battle.BoardHeight)},"armies":(##class(%DynamicArray).%New())}
+    set terrain = $select(battle.Terrain="":##class(BronzeWars.Model.Battle).#TERRAINDESERT, 1:battle.Terrain)
+    set value = {"id":(battle.%Id()),"name":(battle.Name),"status":(battle.Status),"phase":(battle.Phase),"terrain":(terrain),"currentRound":(battle.CurrentRound),"createdAt":(..Timestamp(battle.CreatedAt)),"board":{"width":(battle.BoardWidth),"height":(battle.BoardHeight)},"armies":(##class(%DynamicArray).%New())}
     if battle.StartedAt = "" do value.%Set("startedAt", "", "null")
     if battle.StartedAt '= "" do value.%Set("startedAt", ..Timestamp(battle.StartedAt))
     if battle.FinishedAt = "" do value.%Set("finishedAt", "", "null")
     if battle.FinishedAt '= "" do value.%Set("finishedAt", ..Timestamp(battle.FinishedAt))
+    if battle.FinishReason = "" do value.%Set("finishReason", "", "null")
+    if battle.FinishReason '= "" do value.%Set("finishReason", battle.FinishReason)
     set battleId = battle.%Id()
     &sql(DECLARE ArmyCursor CURSOR FOR SELECT %ID FROM BronzeWars_Model.Army WHERE Battle = :battleId ORDER BY Side DESC)
     &sql(OPEN ArmyCursor)
@@ -118,7 +121,43 @@ ClassMethod Battle(battle As BronzeWars.Model.Battle, hideAIPositions As %Boolea
         do value.armies.%Push(..Army(army, hide))
     }
     &sql(CLOSE ArmyCursor)
+    if battle.Status = ##class(BronzeWars.Model.Battle).#STATUSFINISHED do value.%Set("outcome", ..BattleOutcome(battle))
     return value
+}
+
+ClassMethod BattleOutcome(battle As BronzeWars.Model.Battle) As %DynamicObject
+{
+    set winnerArmyId = "", defeatedArmyId = ""
+    if $isobject(battle.WinnerArmy) set winnerArmyId = battle.WinnerArmy.%Id()
+    if $isobject(battle.DefeatedArmy) set defeatedArmyId = battle.DefeatedArmy.%Id()
+    set outcome = {"reason":(battle.FinishReason),"winnerArmyId":(winnerArmyId),"defeatedArmyId":(defeatedArmyId),"armies":(##class(%DynamicArray).%New())}
+    set battleId = battle.%Id()
+    &sql(DECLARE OutcomeArmyCursor CURSOR FOR SELECT %ID FROM BronzeWars_Model.Army WHERE Battle = :battleId ORDER BY Side DESC)
+    &sql(OPEN OutcomeArmyCursor)
+    for {
+        &sql(FETCH OutcomeArmyCursor INTO :armyId)
+        quit:(SQLCODE'=0)
+        set army = ##class(BronzeWars.Model.Army).%OpenId(armyId)
+        set initialForces = 0, survivingForces = 0, casualties = 0, fled = 0, prisoners = 0
+        &sql(DECLARE OutcomeUnitCursor CURSOR FOR SELECT %ID FROM BronzeWars_Model.BattleUnit WHERE Army = :armyId)
+        &sql(OPEN OutcomeUnitCursor)
+        for {
+            &sql(FETCH OutcomeUnitCursor INTO :unitId)
+            quit:(SQLCODE'=0)
+            set unit = ##class(BronzeWars.Model.BattleUnit).%OpenId(unitId)
+            set initialStrength = unit.UnitType.InitialStrength
+            if $isobject(unit.UnitProfile) set initialStrength = unit.UnitProfile.InitialStrength
+            set initialForces = initialForces + initialStrength
+            set casualties = casualties + (initialStrength - unit.CurrentStrength)
+            if unit.CurrentStrength > 0 set survivingForces = survivingForces + unit.CurrentStrength
+            if ('unit.Active) && (unit.CurrentStrength>0) set fled = fled + unit.CurrentStrength
+            if (battle.FinishReason="SURRENDER") && (armyId=defeatedArmyId) && unit.Active && (unit.CurrentStrength>0) set prisoners = prisoners + unit.CurrentStrength
+        }
+        &sql(CLOSE OutcomeUnitCursor)
+        do outcome.armies.%Push({"armyId":(armyId),"side":(army.Side),"faction":(army.Faction),"winner":(army.Winner),"initialForces":(initialForces),"survivingForces":(survivingForces),"casualties":(casualties),"prisoners":(prisoners),"fled":(fled)})
+    }
+    &sql(CLOSE OutcomeArmyCursor)
+    return outcome
 }
 
 ClassMethod Deployment(battle As BronzeWars.Model.Battle) As %DynamicObject

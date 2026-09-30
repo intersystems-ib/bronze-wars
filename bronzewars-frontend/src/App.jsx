@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from './api/client';
 import AppNavigation from './components/AppNavigation';
 import BattleSetup from './components/BattleSetup';
+import BattleEndModal from './components/BattleEndModal';
 import BattleView from './components/BattleView';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import LoadBattlePage from './components/LoadBattlePage';
@@ -153,6 +154,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [turnConfirmation, setTurnConfirmation] = useState(null);
+  const [turnWarningSuppressedBattleId, setTurnWarningSuppressedBattleId] = useState(null);
   const [deployingEnemy, setDeployingEnemy] = useState(false);
   const [animatingUnitId, setAnimatingUnitId] = useState(null);
   const [automaticEncounter, setAutomaticEncounter] = useState(null);
@@ -259,11 +261,13 @@ export default function App() {
       const payload = await api.nextTurn(battle.id, confirmIncomplete);
       const movementTrace = payload.aiMovementTrace || [];
       const combatTrace = payload.aiCombatTrace || [];
+      const humanRetreatTrace = payload.humanRetreatTrace || [];
+      const completeMovementTrace = [...movementTrace, ...humanRetreatTrace];
       const approachTrace = movementTrace.filter((movement) => movement.phase !== 'POST_ATTACK_RETREAT');
       const retreatTrace = movementTrace.filter((movement) => movement.phase === 'POST_ATTACK_RETREAT');
       setTurnConfirmation(null);
-      if (movementTrace.length > 0 || combatTrace.length > 0) {
-        setBattle(stageAICombatTrace(stageAIMovementTrace(payload.battle, movementTrace), combatTrace));
+      if (completeMovementTrace.length > 0 || combatTrace.length > 0) {
+        setBattle(stageAICombatTrace(stageAIMovementTrace(payload.battle, completeMovementTrace), combatTrace));
         await wait(100);
       }
       const animateMovement = async (movement) => {
@@ -297,6 +301,7 @@ export default function App() {
       for (let combatIndex = 0; combatIndex < combatTrace.length; combatIndex += 1) {
         if (!resolvedCombats.has(combatIndex)) await showAutomaticCombat(combatTrace[combatIndex], combatIndex);
       }
+      for (const movement of humanRetreatTrace) await animateMovement(movement);
       setBattle(payload.battle);
     } catch (caughtError) {
       if (caughtError.code === 'UNITS_PENDING_MOVEMENT') {
@@ -309,6 +314,13 @@ export default function App() {
       setAutomaticEncounter(null);
       setBusy(false);
     }
+  }
+
+  function confirmAdvanceTurn() {
+    if (turnConfirmation?.dontShowAgain && battle) {
+      setTurnWarningSuppressedBattleId(String(battle.id));
+    }
+    advanceTurn(true);
   }
 
   async function startBattle() {
@@ -327,6 +339,17 @@ export default function App() {
       setDeployingEnemy(false);
       setBusy(false);
     }
+  }
+
+  function surrenderBattle() {
+    if (!battle) return;
+    run(async () => {
+      const payload = await api.surrenderBattle(battle.id);
+      setBattle(payload.battle);
+      setTurnConfirmation(null);
+      setAutomaticEncounter(null);
+      setSelectedUnitId(null);
+    });
   }
 
   function leaveBattle() {
@@ -384,13 +407,18 @@ export default function App() {
             onMoveUnit={moveUnit}
             onAttackUnit={attackUnit}
             onStart={startBattle}
-            onNextTurn={() => advanceTurn(false)}
+            onNextTurn={() => advanceTurn(String(battle.id) === turnWarningSuppressedBattleId)}
             turnConfirmation={turnConfirmation}
-            onConfirmNextTurn={() => advanceTurn(true)}
+            onTurnConfirmationChange={(dontShowAgain) => setTurnConfirmation((current) => (
+              current ? { ...current, dontShowAgain } : current
+            ))}
+            onConfirmNextTurn={confirmAdvanceTurn}
             onCancelNextTurn={() => setTurnConfirmation(null)}
             onAutomaticEncounterClose={() => setAutomaticEncounter(null)}
+            onSurrender={surrenderBattle}
             onExit={leaveBattle}
           />
+          {battle.status === 'FINISHED' && <BattleEndModal battle={battle} onClose={leaveBattle} />}
           <footer>BronzeWars · InterSystems IRIS</footer>
         </>
       ) : (

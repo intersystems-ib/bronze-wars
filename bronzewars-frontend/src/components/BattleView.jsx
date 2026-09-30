@@ -20,9 +20,11 @@ export default function BattleView({
   onStart,
   onNextTurn,
   turnConfirmation,
+  onTurnConfirmationChange,
   onConfirmNextTurn,
   onCancelNextTurn,
   onAutomaticEncounterClose,
+  onSurrender,
   onExit,
 }) {
   const { t } = useI18n();
@@ -80,75 +82,74 @@ export default function BattleView({
 
   return (
     <main className="battle-layout">
-      <header className="battle-header panel">
-        <div>
-          <p className="eyebrow">{t('battle.battle')} #{battle.id}</p>
-          <h1>{battle.name}</h1>
-        </div>
-        <dl className="battle-meta">
-          <div><dt>{t('battle.status')}</dt><dd>{t(`statuses.${battle.status}`)}</dd></div>
-          <div><dt>{t('battle.phase')}</dt><dd>{t(`phases.${battle.phase}`)}</dd></div>
-          <div><dt>{t('battle.round')}</dt><dd>{battle.currentRound}</dd></div>
-          {commanderType && (
-            <div><dt>{t('battle.aiCommander')}</dt><dd>{t(`commanderTypes.${commanderType}`)}</dd></div>
-          )}
-        </dl>
-        <div className="header-actions">
-          {!inDeployment && (
-            <button className="button button--secondary" disabled={busy || !inMovement} onClick={onNextTurn} type="button">
-              {t('battle.nextTurn')}
-            </button>
-          )}
-          <button className="button button--ghost" disabled={busy} onClick={onExit} type="button">{t('battle.newBattle')}</button>
-        </div>
-      </header>
-
       {turnConfirmation && (
-        <section className="turn-confirmation panel" role="alertdialog" aria-labelledby="turn-confirmation-title">
-          <div>
-            <strong id="turn-confirmation-title">{t('battle.pendingMovementTitle')}</strong>
-            <span>{t('battle.pendingMovementMessage', { count: turnConfirmation.pendingUnits })}</span>
-          </div>
-          <div className="turn-confirmation__actions">
-            <button className="button button--ghost" disabled={busy} onClick={onCancelNextTurn} type="button">{t('battle.stayInTurn')}</button>
-            <button className="button button--primary" disabled={busy} onClick={onConfirmNextTurn} type="button">{t('battle.advanceAnyway')}</button>
-          </div>
-        </section>
+        <div className="turn-confirmation-overlay" role="presentation">
+          <section className="turn-confirmation panel" role="alertdialog" aria-modal="true" aria-labelledby="turn-confirmation-title" aria-describedby="turn-confirmation-message">
+            <div>
+              <strong id="turn-confirmation-title">{t('battle.pendingMovementTitle')}</strong>
+              <span id="turn-confirmation-message">{t('battle.pendingMovementMessage', { count: turnConfirmation.pendingUnits })}</span>
+            </div>
+            <label className="turn-confirmation__preference">
+              <input
+                checked={Boolean(turnConfirmation.dontShowAgain)}
+                disabled={busy}
+                onChange={(event) => onTurnConfirmationChange(event.target.checked)}
+                type="checkbox"
+              />
+              <span>{t('battle.dontShowTurnWarningAgain')}</span>
+            </label>
+            <div className="turn-confirmation__actions">
+              <button className="button button--ghost" disabled={busy} onClick={onCancelNextTurn} type="button">{t('battle.stayInTurn')}</button>
+              <button className="button button--primary" disabled={busy} onClick={onConfirmNextTurn} type="button">{t('battle.advanceAnyway')}</button>
+            </div>
+          </section>
+        </div>
       )}
 
       <div className="battle-workspace">
-        {inDeployment ? (
-          <UnitRoster
-            army={humanArmy}
-            selectedUnitId={selectedUnitId}
-            disabled={busy}
-            onSelect={onSelectUnit}
-            onDragStart={setDraggedUnitId}
-            onDragEnd={finishDragging}
-          />
-        ) : (
-          <UnitInspector unit={selectedUnit} army={selectedArmy} />
-        )}
+        <div className="battle-sidebar">
+          <section className="battle-controls panel">
+            <div>
+              <p className="eyebrow">{t('battle.battle')} #{battle.id}</p>
+              <h1>{battle.name}</h1>
+            </div>
+            <dl className="battle-controls__meta">
+              <div><dt>{t('battle.round')}</dt><dd>{battle.currentRound}</dd></div>
+              {commanderType && (
+                <div><dt>{t('battle.aiCommander')}</dt><dd>{t(`commanderTypes.${commanderType}`)}</dd></div>
+              )}
+            </dl>
+            <div className="battle-controls__actions">
+              {inDeployment ? (
+                <button className="button button--primary" disabled={!humanReady || busy} onClick={onStart} type="button">
+                  {busy ? t('battle.starting') : t('battle.start')}
+                </button>
+              ) : (
+                <button className="button button--secondary" disabled={busy || !inMovement} onClick={onNextTurn} type="button">
+                  {t('battle.nextTurn')}
+                </button>
+              )}
+              {!inDeployment && (
+                <button className="button button--ghost" disabled={busy} onClick={onSurrender} type="button">{t('battle.surrender')}</button>
+              )}
+            </div>
+          </section>
+
+          {inDeployment ? (
+            <UnitRoster
+              army={humanArmy}
+              selectedUnitId={selectedUnitId}
+              disabled={busy}
+              onSelect={onSelectUnit}
+              onDragStart={setDraggedUnitId}
+              onDragEnd={finishDragging}
+            />
+          ) : (
+            <UnitInspector unit={selectedUnit} army={selectedArmy} />
+          )}
+        </div>
 
         <div className="board-column">
-          <div className={`command-strip ${humanReady ? 'is-ready' : ''}`}>
-            <div>
-              <strong>{selectedUnit ? `${t('battle.selected')}: ${selectedUnit.type.name}` : t('battle.dragInstruction')}</strong>
-              <span>
-                {!inDeployment
-                  ? t('battle.startedInstruction')
-                  : humanReady
-                    ? t('battle.deploymentComplete')
-                    : t('battle.deploymentPending')}
-              </span>
-            </div>
-            {inDeployment && (
-              <button className="button button--primary" disabled={!humanReady || busy} onClick={onStart} type="button">
-                {busy ? t('battle.starting') : t('battle.start')}
-              </button>
-            )}
-          </div>
-
           <BattleBoard
             battle={battle}
             armyDesignId={armyDesignId}
