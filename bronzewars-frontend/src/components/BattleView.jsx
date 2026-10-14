@@ -5,6 +5,80 @@ import BattleEncounterModal from './BattleEncounterModal';
 import UnitInspector from './UnitInspector';
 import UnitRoster from './UnitRoster';
 
+function armySurrenderMetrics(army) {
+  const units = army?.units || [];
+  const initialSoldiers = units.reduce((total, unit) => (
+    total + Math.max(0, Number(unit.type?.initialStrength) || Number(unit.currentStrength) || 0)
+  ), 0);
+  const activeUnits = units.filter((unit) => unit.active !== false && Number(unit.currentStrength) > 0);
+  const survivingSoldiers = activeUnits.reduce(
+    (total, unit) => total + Math.max(0, Number(unit.currentStrength) || 0),
+    0,
+  );
+  const totalMorale = activeUnits.reduce(
+    (total, unit) => total + (Math.max(0, Number(unit.morale ?? 100)) * Math.max(0, Number(unit.currentStrength) || 0)),
+    0,
+  );
+
+  return {
+    troopPercentage: initialSoldiers > 0 ? Math.min(100, (survivingSoldiers / initialSoldiers) * 100) : 0,
+    moralePercentage: initialSoldiers > 0 ? Math.min(100, totalMorale / initialSoldiers) : 0,
+  };
+}
+
+function ArmyScore({ army, side, color }) {
+  const metrics = armySurrenderMetrics(army);
+  const name = army?.name || side;
+  const scores = [
+    { label: 'Tropas', value: metrics.troopPercentage },
+    { label: 'Moral', value: metrics.moralePercentage },
+  ];
+
+  return (
+    <div className={`battle-status__team battle-status__team--${side}`} style={{ display: 'grid', gap: '6px' }}>
+      <strong style={{ color }}>{name}</strong>
+      {scores.map(({ label, value }) => {
+        const percentage = Math.round(value);
+        const accessibleLabel = `${name}, ${label}: ${percentage}%`;
+        return (
+          <div className="battle-status__metric" key={label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+              <span>{label}</span>
+              <span>{percentage}%</span>
+            </div>
+            <div
+              aria-label={accessibleLabel}
+              aria-valuemax="100"
+              aria-valuemin="0"
+              aria-valuenow={percentage}
+              className="battle-status__bar"
+              role="progressbar"
+              style={{ height: '10px', overflow: 'hidden', borderRadius: '999px', backgroundColor: '#403a31' }}
+            >
+              <span style={{ display: 'block', width: `${value}%`, height: '100%', backgroundColor: color, transition: 'width 250ms ease' }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BattleStatusBar({ humanArmy, aiArmy }) {
+  const label = `${humanArmy?.name || 'Human'} y ${aiArmy?.name || 'AI'}: porcentajes de tropas y moral supervivientes.`;
+
+  return (
+    <section
+      aria-label={label}
+      className="battle-status"
+      style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px', padding: '10px 0' }}
+    >
+      <ArmyScore army={humanArmy} side="human" color="#d7a842" />
+      <ArmyScore army={aiArmy} side="ai" color="#b34d3e" />
+    </section>
+  );
+}
+
 export default function BattleView({
   battle,
   armyDesignId,
@@ -150,6 +224,7 @@ export default function BattleView({
         </div>
 
         <div className="board-column">
+          {!inDeployment && <BattleStatusBar humanArmy={humanArmy} aiArmy={aiArmy} />}
           <BattleBoard
             battle={battle}
             armyDesignId={armyDesignId}

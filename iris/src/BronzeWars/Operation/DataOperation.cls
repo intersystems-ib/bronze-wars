@@ -854,13 +854,13 @@ Method EvaluateBattleConclusion(battle As BronzeWars.Model.Battle, Output surren
     set humanMetrics = ##class(BronzeWars.Rules.Surrender).ArmyMetrics(humanArmy)
     set aiMetrics = ##class(BronzeWars.Rules.Surrender).ArmyMetrics(aiArmy)
     if aiMetrics.survivingSoldiers <= 0 {
-        set surrenderEvaluation = {"surrendered":false,"reason":null,"armyMorale":(aiMetrics.armyMorale),"relativeStrength":0,"surrenderPressureTurns":0}
+        set surrenderEvaluation = {"surrendered":false,"reason":null,"armyMorale":(aiMetrics.armyMorale),"troopPercentage":(aiMetrics.troopPercentage),"moralePercentage":(aiMetrics.moralePercentage),"relativeStrength":0,"surrenderPressureTurns":0}
         set aiArmy.SurrenderPressureTurns = 0, aiArmy.SurrenderPressureRound = ""
         set sc = aiArmy.%Save()
         if $SYSTEM.Status.IsError(sc) return sc
         return ..FinalizeBattle(battle, humanArmy, aiArmy, "ANNIHILATION", "")
     }
-    set surrenderEvaluation = ##class(BronzeWars.Rules.Surrender).Evaluate(aiMetrics.armyMorale, aiMetrics.survivingSoldiers, humanMetrics.survivingSoldiers, aiArmy.SurrenderPressureTurns)
+    set surrenderEvaluation = ##class(BronzeWars.Rules.Surrender).Evaluate(aiMetrics.armyMorale, aiMetrics.troopPercentage, aiMetrics.moralePercentage, aiMetrics.survivingSoldiers, humanMetrics.survivingSoldiers, aiArmy.SurrenderPressureTurns)
     if (surrenderEvaluation.surrenderPressureTurns>aiArmy.SurrenderPressureTurns) && (aiArmy.SurrenderPressureRound=battle.CurrentRound) {
         set surrenderEvaluation.surrenderPressureTurns = aiArmy.SurrenderPressureTurns
         set surrenderEvaluation.surrendered = 0
@@ -892,7 +892,7 @@ Method SurrenderBattle(battleId As %String, side As %String) As %DynamicObject [
     if '$isobject(defeatedArmy) ! '$isobject(winnerArmy) return ##class(BronzeWars.Service.Result).Error(404, "ARMY_NOT_FOUND", "No se encuentra uno de los ejercitos de la batalla.")
 
     set metrics = ##class(BronzeWars.Rules.Surrender).ArmyMetrics(defeatedArmy)
-    set surrenderEvaluation = {"surrendered":true,"reason":"PLAYER_SURRENDER","armyMorale":(metrics.armyMorale),"relativeStrength":null,"surrenderPressureTurns":(defeatedArmy.SurrenderPressureTurns)}
+    set surrenderEvaluation = {"surrendered":true,"reason":"PLAYER_SURRENDER","armyMorale":(metrics.armyMorale),"troopPercentage":(metrics.troopPercentage),"moralePercentage":(metrics.moralePercentage),"relativeStrength":null,"surrenderPressureTurns":(defeatedArmy.SurrenderPressureTurns)}
     tstart
     set result = ""
     try {

@@ -141,6 +141,7 @@ export default function BattleBoard({ battle, armyDesignId, selectedUnitId, anim
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const unit = unitsByPosition.get(positionKey(x, y));
+      const terrainFeature = terrainFeatures.get(positionKey(x, y));
       const zone = y <= 2 ? 'ai' : y >= height - 3 ? 'human' : 'neutral';
       const selected = unit && String(unit.id) === String(selectedUnitId);
       const deploymentDropAllowed = canDeploy && zone === 'human' && (!unit || String(unit.id) === String(draggedUnitId));
@@ -160,8 +161,11 @@ export default function BattleBoard({ battle, armyDesignId, selectedUnitId, anim
           className={`board-cell zone-${zone} ${canDeploy && zone === 'human' && !busy ? 'is-deployment-target' : ''} ${movementAllowed && !busy ? 'is-movement-target' : ''} ${attackable ? 'is-attack-target' : ''} ${inspectable ? 'is-inspectable' : ''} ${unit ? 'has-unit' : ''} ${selected ? 'is-selected' : ''} ${dropTarget === cellKey ? 'is-drop-target' : ''}`}
           key={cellKey}
           style={{
-            '--terrain-image': `url(${terrainTextures[terrainFeatures.get(cellKey) || 'base']})`,
-            '--terrain-position': `${(x * 37 + y * 11) % 101}% ${(y * 43 + x * 7) % 101}%`,
+            '--terrain-image': `url(${terrainTextures[terrainFeature || 'base']})`,
+            '--terrain-position': terrainFeature
+              ? 'center'
+              : `${(x * 37 + y * 11) % 101}% ${(y * 43 + x * 7) % 101}%`,
+            ...(terrainFeature ? { backgroundSize: '100% 100%' } : {}),
           }}
           onClick={() => {
             if (attackable && !busy) onAttackTarget(unit);
