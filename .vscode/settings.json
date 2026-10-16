@@ -1,0 +1,7 @@
+{
+    "objectscript.conn": {
+        "server": "webgateway_8080",
+        "ns": "BRONZEWARS",
+        "active": false
+    }
+}

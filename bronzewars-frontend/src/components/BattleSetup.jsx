@@ -10,12 +10,14 @@ export default function BattleSetup({ unitTypes, loadingUnitTypes, armyDesignId,
   const [name, setName] = useState('');
   const [width, setWidth] = useState(15);
   const [height, setHeight] = useState(12);
-  const [quantities, setQuantities] = useState(DEFAULT_ARMY_QUANTITIES);
+  const [quantitiesByDesign, setQuantitiesByDesign] = useState({});
   const selectedArmyIndex = Math.max(0, ARMY_DESIGNS.findIndex((design) => design.id === armyDesignId));
   const selectedArmyDesign = ARMY_DESIGNS[selectedArmyIndex];
-  const availableUnitTypes = getUnitTypesForDesign(unitTypes, armyDesignId);
+  const quantities = quantitiesByDesign[selectedArmyDesign.id] || selectedArmyDesign.defaultQuantities || DEFAULT_ARMY_QUANTITIES;
+  const availableUnitTypes = getUnitTypesForDesign(unitTypes, armyDesignId)
+    .filter((unit) => unit.code !== 'MERCENARIES');
   const spent = availableUnitTypes.reduce((total, unit) => total + ((quantities[unit.code] || 0) * unit.grainCost), 0);
-  const unitCount = Object.values(quantities).reduce((total, quantity) => total + quantity, 0);
+  const unitCount = availableUnitTypes.reduce((total, unit) => total + (quantities[unit.code] || 0), 0);
   const validArmy = !loadingUnitTypes && unitCount > 0 && spent <= GRAIN_BUDGET && unitCount <= Number(width) * 3;
 
   function submitCreate(event) {
@@ -67,11 +69,12 @@ export default function BattleSetup({ unitTypes, loadingUnitTypes, armyDesignId,
                   value={selectedArmyDesign.id}
                 />
                 <span className="army-option__art" aria-hidden="true">
-                  <UnitArtwork unitCode="ARCHERS" armyDesignId={selectedArmyDesign.id} />
-                  <UnitArtwork unitCode="HEAVY_INFANTRY" armyDesignId={selectedArmyDesign.id} />
-                  <UnitArtwork unitCode="CHARIOTS" armyDesignId={selectedArmyDesign.id} />
+                  {Object.keys(selectedArmyDesign.unitArtwork).filter((code) => code !== 'MERCENARIES').slice(0, 3).map((code) => (
+                    <UnitArtwork key={code} unitCode={code} armyDesignId={selectedArmyDesign.id} />
+                  ))}
                 </span>
                 <span className="army-option__body">
+                  <img className="army-option__logo" src={selectedArmyDesign.logo} alt="" />
                   <strong>{t(selectedArmyDesign.nameKey)}</strong>
                   <small>{t(selectedArmyDesign.descriptionKey)}</small>
                 </span>
@@ -109,7 +112,7 @@ export default function BattleSetup({ unitTypes, loadingUnitTypes, armyDesignId,
             quantities={quantities}
             armyDesignId={armyDesignId}
             loading={loadingUnitTypes}
-            onChange={setQuantities}
+            onChange={(nextQuantities) => setQuantitiesByDesign((current) => ({ ...current, [selectedArmyDesign.id]: nextQuantities }))}
           />
           <button className="button button--primary field--wide" disabled={busy || !validArmy} type="submit">
             {busy ? t('setup.creating') : t('setup.create')}

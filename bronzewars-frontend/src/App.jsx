@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from './api/client';
 import AppNavigation from './components/AppNavigation';
 import BattleSetup from './components/BattleSetup';
+import CampaignPage from './components/CampaignPage';
 import BattleEndModal from './components/BattleEndModal';
 import BattleView from './components/BattleView';
 import LanguageSwitcher from './components/LanguageSwitcher';
@@ -441,7 +442,9 @@ export default function App() {
           />
           <div className="start-content">
             {errorBanner}
-            {startView === 'load' ? (
+            {startView === 'campaigns' ? (
+              <CampaignPage unitTypes={unitTypes} loadingUnitTypes={loadingUnitTypes} />
+            ) : startView === 'load' ? (
               <LoadBattlePage busy={busy} onResume={resumeBattle} />
             ) : (
               <BattleSetup

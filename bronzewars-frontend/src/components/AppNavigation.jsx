@@ -3,6 +3,7 @@ import { useI18n } from '../i18n/I18nContext';
 import LanguageSwitcher from './LanguageSwitcher';
 
 const ITEMS = [
+  { id: 'campaigns', icon: '⬡', labelKey: 'navigation.campaigns' },
   { id: 'create', icon: '+', labelKey: 'navigation.createBattle' },
   { id: 'load', icon: '↗', labelKey: 'navigation.loadBattle' },
 ];

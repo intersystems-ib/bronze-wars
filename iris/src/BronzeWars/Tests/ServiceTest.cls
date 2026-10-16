@@ -577,6 +577,44 @@ Method Test10AISurrendersAfterShock()
     do $$$AssertEquals(blockedAttack.code, "INVALID_BATTLE_PHASE", "No attack is allowed after surrender")
 }
 
+Method Test10AHumanAutomaticDefeat()
+{
+    for scenario = "COMBINED","CRITICAL" {
+        set battleJSON = ..CreateBattle("Human automatic defeat " _ scenario), battleId = battleJSON.id
+        set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId)
+        set battle.Status = "IN_PROGRESS", battle.Phase = "MOVEMENT", battle.CurrentRound = 1
+        do $$$AssertStatusOK(battle.%Save(), "The automatic defeat fixture starts")
+        set humanUnits = battleJSON.armies.%Get(0).units
+        for index = 0:1:(humanUnits.%Size()-1) {
+            set unit = ##class(BronzeWars.Model.BattleUnit).%OpenId(humanUnits.%Get(index).id)
+            set unit.Morale = 100
+            set unit.CurrentStrength = $select(scenario="CRITICAL":1, 1:(unit.CurrentStrength * .2) \ 1)
+            set unit.PositionX = index, unit.PositionY = 9, unit.IsDeployed = 1
+            do $$$AssertStatusOK(unit.%Save(), "Human troops are depleted while individual morale stays high")
+        }
+        set attacker = ##class(BronzeWars.Model.BattleUnit).%OpenId(humanUnits.%Get(0).id)
+        set attacker.PositionX = 5, attacker.PositionY = 5
+        do $$$AssertStatusOK(attacker.%Save(), "The human attacker is positioned")
+
+        set aiArmy = ..FindArmy(battleId, "AI")
+        set unitType = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("HEAVY_INFANTRY")
+        set unitProfile = ##class(BronzeWars.Model.UnitProfile).UnitFactionIndexOpen(unitType.%Id(), aiArmy.Faction)
+        set defender = ##class(BronzeWars.Model.BattleUnit).%New(unitType, unitProfile)
+        set defender.Battle = battle, defender.Army = aiArmy, defender.Name = "Healthy AI defender"
+        set defender.PositionX = 5, defender.PositionY = 4, defender.IsDeployed = 1
+        do $$$AssertStatusOK(defender.%Save(), "The AI army has healthy troops")
+
+        set result = ##class(BronzeWars.Interop.Client).AttackUnit(battleId, attacker.%Id(), defender.%Id())
+        do $$$AssertTrue(result.ok, "Combat evaluates automatic defeat for the human army")
+        if 'result.ok continue
+        do $$$AssertTrue(result.data.surrenderEvaluation.surrendered, "The depleted human army is defeated immediately")
+        do $$$AssertEquals(result.data.surrenderEvaluation.reason, $select(scenario="CRITICAL":"CRITICAL_MORALE", 1:"LOW_FORCES_AND_MORALE"), "The defeat reason uses total morale rather than average unit morale")
+        do $$$AssertEquals(result.data.battle.status, "FINISHED", "Human automatic defeat finishes the battle")
+        do $$$AssertTrue(result.data.battle.armies.%Get(1).winner, "The AI army is marked as winner")
+        do $$$AssertNotTrue(result.data.battle.armies.%Get(0).winner, "The human army is marked as defeated")
+    }
+}
+
 Method Test11PlayerSurrender()
 {
     set battleJSON = ..CreateBattle("Player surrender test"), battleId = battleJSON.id

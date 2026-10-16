@@ -2,10 +2,10 @@ Class BronzeWars.Rules.Surrender Extends %RegisteredObject
 {
 
 Parameter REASONCRITICALMORALE = "CRITICAL_MORALE";
-Parameter REASONSUSTAINEDDISADVANTAGE = "SUSTAINED_DISADVANTAGE";
+Parameter REASONLOWFORCESANDMORALE = "LOW_FORCES_AND_MORALE";
 Parameter CRITICALMORALEPERCENT = 10;
-Parameter SURRENDERMORALEPERCENT = 30;
-Parameter SURRENDERFORCESPERCENT = 50;
+Parameter SURRENDERMORALEPERCENT = 33;
+Parameter SURRENDERFORCESPERCENT = 33;
 
 ClassMethod Metrics(units As %DynamicArray) As %DynamicObject
 {
@@ -35,9 +35,8 @@ ClassMethod Metrics(units As %DynamicArray) As %DynamicObject
 
 ClassMethod Evaluate(armyMorale As %Numeric, troopPercentage As %Numeric, moralePercentage As %Numeric, ownSurvivingSoldiers As %Integer, enemySurvivingSoldiers As %Integer, surrenderPressureTurns As %Integer = 0) As %DynamicObject
 {
-    set pressure = +surrenderPressureTurns
-    if pressure < 0 set pressure = 0
-    set result = {"surrendered":false,"reason":null,"armyMorale":(+armyMorale),"troopPercentage":(+troopPercentage),"moralePercentage":(+moralePercentage),"relativeStrength":null,"surrenderPressureTurns":(pressure)}
+    // Retain the legacy pressure field and argument for stored battles and API compatibility.
+    set result = {"surrendered":false,"reason":null,"armyMorale":(+armyMorale),"troopPercentage":(+troopPercentage),"moralePercentage":(+moralePercentage),"relativeStrength":null,"surrenderPressureTurns":0}
 
     if enemySurvivingSoldiers <= 0 {
         set result.surrenderPressureTurns = 0
@@ -51,19 +50,15 @@ ClassMethod Evaluate(armyMorale As %Numeric, troopPercentage As %Numeric, morale
         set result.relativeStrength = 0
     }
 
-    if (troopPercentage <= ..#SURRENDERFORCESPERCENT) && (moralePercentage <= ..#CRITICALMORALEPERCENT) {
+    if moralePercentage < ..#CRITICALMORALEPERCENT {
         set result.surrendered = 1
         set result.reason = ..#REASONCRITICALMORALE
         return result
     }
 
-    if (troopPercentage <= ..#SURRENDERFORCESPERCENT) && (moralePercentage <= ..#SURRENDERMORALEPERCENT) {
-        set pressure = pressure + 1
-        set result.surrenderPressureTurns = pressure
-        if pressure >= 2 {
-            set result.surrendered = 1
-            set result.reason = ..#REASONSUSTAINEDDISADVANTAGE
-        }
+    if (troopPercentage < ..#SURRENDERFORCESPERCENT) && (moralePercentage < ..#SURRENDERMORALEPERCENT) {
+        set result.surrendered = 1
+        set result.reason = ..#REASONLOWFORCESANDMORALE
         return result
     }
 

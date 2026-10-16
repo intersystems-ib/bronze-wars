@@ -101,7 +101,21 @@ ClassMethod SeedUnitProfiles() As %Status [ Private ]
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitProfile("CHARIOTS", "EGYPTIAN", 20, 3, 5, 3, 5, 10, "Flechas", 22)
     return:$SYSTEM.Status.IsError(sc) sc
-    return ..UpsertUnitProfile("CHARIOTS", "ASSYRIAN", 15, 3, 6, 4, 2, 18, "Jabalinas", 25)
+    set sc = ..UpsertUnitProfile("CHARIOTS", "ASSYRIAN", 15, 3, 6, 4, 2, 18, "Jabalinas", 25)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("ARCHERS", "NUBIAN", 80, 2, 5, 1, 6, 9, "Flechas", 7)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("LIGHT_INFANTRY", "NUBIAN", 60, 2, 5, 1, 2, 5, "Proyectiles ligeros", 5)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("SPEARMEN", "NUBIAN", 100, 1, 5, 5, 1, 8, "Cuerpo a cuerpo", 6)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("ARCHERS", "SEA_PEOPLES", 80, 2, 4, 3, 6, 7, "Flechas", 7)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("LIGHT_INFANTRY", "SEA_PEOPLES", 60, 2, 5, 2, 2, 4, "Proyectiles ligeros", 5)
+    return:$SYSTEM.Status.IsError(sc) sc
+    set sc = ..UpsertUnitProfile("HEAVY_INFANTRY", "SEA_PEOPLES", 100, 1, 7, 8, 1, 9, "Cuerpo a cuerpo", 9)
+    return:$SYSTEM.Status.IsError(sc) sc
+    return ..UpsertUnitProfile("SPEARMEN", "SEA_PEOPLES", 100, 1, 6, 5, 1, 7, "Cuerpo a cuerpo", 6)
 }
 
 ClassMethod SeedModifiers() As %Status [ Private ]

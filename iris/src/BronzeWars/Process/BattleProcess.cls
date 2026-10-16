@@ -15,7 +15,7 @@ Method OnRequest(request As BronzeWars.Message.Request, Output response As Bronz
         if 'payload.%IsDefined("boardHeight") do payload.%Set("boardHeight", 12)
         if 'payload.%IsDefined("faction") do payload.%Set("faction", "EGYPTIAN")
         set payload.faction = $zconvert(payload.faction, "U")
-        if (payload.faction '= "EGYPTIAN") && (payload.faction '= "ASSYRIAN") return ..SetError(.response, 422, "INVALID_FACTION", "La faccion seleccionada no es valida.")
+        if '##class(BronzeWars.Rules.ArmyBudget).IsSupportedFaction(payload.faction) return ..SetError(.response, 422, "INVALID_FACTION", "La faccion seleccionada no es valida.")
         if (payload.boardWidth < 1) ! (payload.boardHeight < 1) return ..SetError(.response, 422, "INVALID_BOARD_SIZE", "Las dimensiones del tablero deben ser positivas.")
         if (payload.boardWidth * 3) < 4 return ..SetError(.response, 422, "BOARD_TOO_NARROW", "La zona de despliegue debe admitir al menos cuatro unidades para consumir el presupuesto de la IA.")
         if payload.boardHeight < 6 return ..SetError(.response, 422, "BOARD_TOO_SHORT", "El tablero debe tener al menos seis filas.")

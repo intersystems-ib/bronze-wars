@@ -4,9 +4,16 @@ Class BronzeWars.Rules.ArmyBudget Extends %RegisteredObject
 Parameter TOTAL = 100;
 Parameter AIMaxUnits = 14;
 
+ClassMethod IsSupportedFaction(faction As %String) As %Boolean
+{
+    return $listfind($listbuild("EGYPTIAN", "ASSYRIAN", "NUBIAN", "SEA_PEOPLES"), $zconvert(faction, "U")) > 0
+}
+
 ClassMethod GrainCost(code As %String, faction As %String = "") As %Integer
 {
     set faction = $zconvert(faction, "U")
+    if faction = "NUBIAN", '$listfind($listbuild("ARCHERS", "LIGHT_INFANTRY", "SPEARMEN"), code) return 0
+    if faction = "SEA_PEOPLES", '$listfind($listbuild("ARCHERS", "LIGHT_INFANTRY", "HEAVY_INFANTRY", "SPEARMEN"), code) return 0
     if code = "LIGHT_INFANTRY" {
         if faction = "EGYPTIAN" return 6
         if faction = "ASSYRIAN" return 4
@@ -35,6 +42,8 @@ ClassMethod GrainCost(code As %String, faction As %String = "") As %Integer
 
 ClassMethod DefaultComposition(faction As %String = "") As %DynamicArray
 {
+    if faction = "NUBIAN" return [{"code":"SPEARMEN","quantity":5},{"code":"LIGHT_INFANTRY","quantity":7},{"code":"ARCHERS","quantity":5}]
+    if faction = "SEA_PEOPLES" return [{"code":"SPEARMEN","quantity":5},{"code":"HEAVY_INFANTRY","quantity":4},{"code":"LIGHT_INFANTRY","quantity":4},{"code":"ARCHERS","quantity":2}]
     return [{"code":"SPEARMEN","quantity":4},{"code":"HEAVY_INFANTRY","quantity":2},{"code":"LIGHT_INFANTRY","quantity":2},{"code":"LIGHT_CAVALRY","quantity":2}]
 }
 

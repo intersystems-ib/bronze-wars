@@ -1,5 +1,4 @@
-import assyriaLogo from '../assets/nations/assyria.png';
-import egyptLogo from '../assets/nations/egypt.png';
+import { getArmyDesignForFaction } from '../config/armyDesigns';
 import { useI18n } from '../i18n/I18nContext';
 
 const SUMMARY_GLYPHS = {
@@ -10,11 +9,11 @@ const SUMMARY_GLYPHS = {
 };
 
 function nationLogo(faction) {
-  return faction === 'ASSYRIAN' ? assyriaLogo : egyptLogo;
+  return getArmyDesignForFaction(faction).logo;
 }
 
 function nationNameKey(faction) {
-  return faction === 'ASSYRIAN' ? 'armies.assyria.name' : 'armies.egypt.name';
+  return getArmyDesignForFaction(faction).nameKey;
 }
 
 function ArmyOutcome({ army, summary }) {

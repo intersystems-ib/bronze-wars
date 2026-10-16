@@ -1,33 +1,49 @@
-import archersEgypt from '../assets/archer_1.jpg';
-import chariotsEgypt from '../assets/charioter_1.jpg';
-import heavyCavalryEgypt from '../assets/heavy_cavalry_1.jpg';
-import heavyInfantryEgypt from '../assets/heavy_infantry_1.jpg';
-import lightCavalryEgypt from '../assets/light_cavalry_1.jpg';
-import lightInfantryEgypt from '../assets/light_infantry_1.jpg';
-import mercenaries from '../assets/mercenary.jpg';
-import spearmenEgypt from '../assets/pikeman_1.jpg';
-import archersAssyria from '../assets/archer_2.jpg';
-import chariotsAssyria from '../assets/charioter_2.jpg';
-import heavyCavalryAssyria from '../assets/heavy_cavalry_2.jpg';
-import heavyInfantryAssyria from '../assets/heavy_infantry_2.jpg';
-import lightCavalryAssyria from '../assets/light_cavalry_2.jpg';
-import lightInfantryAssyria from '../assets/light_infantry_2.jpg';
-import spearmenAssyria from '../assets/pikeman_2.jpg';
-import battlefieldArchersEgypt from '../assets/units/archer_1.png';
-import battlefieldChariotsEgypt from '../assets/units/charioter_1.png';
-import battlefieldHeavyCavalryEgypt from '../assets/units/heavy_cavalry_1.png';
-import battlefieldHeavyInfantryEgypt from '../assets/units/heavy_infantry_1.png';
-import battlefieldLightCavalryEgypt from '../assets/units/light_cavalry_1.png';
-import battlefieldLightInfantryEgypt from '../assets/units/light_infantry_1.png';
-import battlefieldMercenaries from '../assets/units/mercenary.png';
-import battlefieldSpearmenEgypt from '../assets/units/pikeman_1.png';
-import battlefieldArchersAssyria from '../assets/units/archer_2.png';
-import battlefieldChariotsAssyria from '../assets/units/charioter_2.png';
-import battlefieldHeavyCavalryAssyria from '../assets/units/heavy_cavalry_2.png';
-import battlefieldHeavyInfantryAssyria from '../assets/units/heavy_infantry_2.png';
-import battlefieldLightCavalryAssyria from '../assets/units/light_cavalry_2.png';
-import battlefieldLightInfantryAssyria from '../assets/units/light_infantry_2.png';
-import battlefieldSpearmenAssyria from '../assets/units/pikeman_2.png';
+import archersEgypt from '../assets/archer_egypt.jpg';
+import chariotsEgypt from '../assets/charioter_egypt.jpg';
+import heavyCavalryEgypt from '../assets/heavy_cavalry_egypt.jpg';
+import heavyInfantryEgypt from '../assets/heavy_infantry_egypt.jpg';
+import lightCavalryEgypt from '../assets/light_cavalry_egypt.jpg';
+import lightInfantryEgypt from '../assets/light_infantry_egypt.jpg';
+import seapeopleSpearmen from '../assets/pikeman_seapeople.jpg';
+import spearmenEgypt from '../assets/pikeman_egypt.jpg';
+import archersAssyria from '../assets/archer_assyria.jpg';
+import chariotsAssyria from '../assets/charioter_assyria.jpg';
+import heavyCavalryAssyria from '../assets/heavy_cavalry_assyria.jpg';
+import heavyInfantryAssyria from '../assets/heavy_infantry_assyria.jpg';
+import lightCavalryAssyria from '../assets/light_cavalry_assyria.jpg';
+import lightInfantryAssyria from '../assets/light_infantry_assyria.jpg';
+import spearmenAssyria from '../assets/pikeman_assyria.jpg';
+import battlefieldArchersEgypt from '../assets/units/archer_egypt.png';
+import battlefieldChariotsEgypt from '../assets/units/charioter_egypt.png';
+import battlefieldHeavyCavalryEgypt from '../assets/units/heavy_cavalry_egypt.png';
+import battlefieldHeavyInfantryEgypt from '../assets/units/heavy_infantry_egypt.png';
+import battlefieldLightCavalryEgypt from '../assets/units/light_cavalry_egypt.png';
+import battlefieldLightInfantryEgypt from '../assets/units/light_infantry_egypt.png';
+import battlefieldSeapeopleSpearmen from '../assets/units/pikeman_seapeople.png';
+import battlefieldSpearmenEgypt from '../assets/units/pikeman_egypt.png';
+import battlefieldArchersAssyria from '../assets/units/archer_asyria.png';
+import battlefieldChariotsAssyria from '../assets/units/charioter_asyria.png';
+import battlefieldHeavyCavalryAssyria from '../assets/units/heavy_cavalry_asyria.png';
+import battlefieldHeavyInfantryAssyria from '../assets/units/heavy_infantry_asyria.png';
+import battlefieldLightCavalryAssyria from '../assets/units/light_cavalry_asyria.png';
+import battlefieldLightInfantryAssyria from '../assets/units/light_infantry_asyria.png';
+import battlefieldSpearmenAssyria from '../assets/units/pikeman_asyria.png';
+import archersNubia from '../assets/archer_nubia.jpg';
+import lightInfantryNubia from '../assets/light_infantry_nubia.jpg';
+import spearmenNubia from '../assets/pikeman_nubia.jpg';
+import battlefieldArchersNubia from '../assets/units/archer_nubia.png';
+import battlefieldLightInfantryNubia from '../assets/units/light_infantry_nubia.png';
+import battlefieldSpearmenNubia from '../assets/units/pikeman_nubia.png';
+import archersSeaPeoples from '../assets/archer_seapeople.jpg';
+import lightInfantrySeaPeoples from '../assets/light_infantry_seapeople.jpg';
+import heavyInfantrySeaPeoples from '../assets/heavy_infantry_seapeople.jpg';
+import battlefieldArchersSeaPeoples from '../assets/units/archer_seapeople.png';
+import battlefieldLightInfantrySeaPeoples from '../assets/units/light_infantry_seapeople.png';
+import battlefieldHeavyInfantrySeaPeoples from '../assets/units/heavy_infantry_seapeople.png';
+import egyptLogo from '../assets/nations/egypt.png';
+import assyriaLogo from '../assets/nations/assyria.png';
+import nubiaLogo from '../assets/nations/nubia.png';
+import seaPeoplesLogo from '../assets/nations/seapeople.png';
 
 export const DEFAULT_ARMY_DESIGN_ID = 'egypt';
 
@@ -35,6 +51,7 @@ export const ARMY_DESIGNS = [
   {
     id: 'egypt',
     faction: 'EGYPTIAN',
+    logo: egyptLogo,
     nameKey: 'armies.egypt.name',
     descriptionKey: 'armies.egypt.description',
     unitArtwork: {
@@ -44,7 +61,7 @@ export const ARMY_DESIGNS = [
       HEAVY_INFANTRY: heavyInfantryEgypt,
       LIGHT_CAVALRY: lightCavalryEgypt,
       LIGHT_INFANTRY: lightInfantryEgypt,
-      MERCENARIES: mercenaries,
+      MERCENARIES: seapeopleSpearmen,
       SPEARMEN: spearmenEgypt,
     },
     battlefieldArtwork: {
@@ -54,13 +71,14 @@ export const ARMY_DESIGNS = [
       HEAVY_INFANTRY: battlefieldHeavyInfantryEgypt,
       LIGHT_CAVALRY: battlefieldLightCavalryEgypt,
       LIGHT_INFANTRY: battlefieldLightInfantryEgypt,
-      MERCENARIES: battlefieldMercenaries,
+      MERCENARIES: battlefieldSeapeopleSpearmen,
       SPEARMEN: battlefieldSpearmenEgypt,
     },
   },
   {
     id: 'assyria',
     faction: 'ASSYRIAN',
+    logo: assyriaLogo,
     nameKey: 'armies.assyria.name',
     descriptionKey: 'armies.assyria.description',
     unitArtwork: {
@@ -70,7 +88,7 @@ export const ARMY_DESIGNS = [
       HEAVY_INFANTRY: heavyInfantryAssyria,
       LIGHT_CAVALRY: lightCavalryAssyria,
       LIGHT_INFANTRY: lightInfantryAssyria,
-      MERCENARIES: mercenaries,
+      MERCENARIES: seapeopleSpearmen,
       SPEARMEN: spearmenAssyria,
     },
     battlefieldArtwork: {
@@ -80,8 +98,46 @@ export const ARMY_DESIGNS = [
       HEAVY_INFANTRY: battlefieldHeavyInfantryAssyria,
       LIGHT_CAVALRY: battlefieldLightCavalryAssyria,
       LIGHT_INFANTRY: battlefieldLightInfantryAssyria,
-      MERCENARIES: battlefieldMercenaries,
+      MERCENARIES: battlefieldSeapeopleSpearmen,
       SPEARMEN: battlefieldSpearmenAssyria,
+    },
+  },
+  {
+    id: 'nubia',
+    faction: 'NUBIAN',
+    logo: nubiaLogo,
+    nameKey: 'armies.nubia.name',
+    descriptionKey: 'armies.nubia.description',
+    defaultQuantities: { SPEARMEN: 5, LIGHT_INFANTRY: 7, ARCHERS: 5 },
+    unitArtwork: {
+      ARCHERS: archersNubia,
+      LIGHT_INFANTRY: lightInfantryNubia,
+      SPEARMEN: spearmenNubia,
+    },
+    battlefieldArtwork: {
+      ARCHERS: battlefieldArchersNubia,
+      LIGHT_INFANTRY: battlefieldLightInfantryNubia,
+      SPEARMEN: battlefieldSpearmenNubia,
+    },
+  },
+  {
+    id: 'seapeople',
+    faction: 'SEA_PEOPLES',
+    logo: seaPeoplesLogo,
+    nameKey: 'armies.seapeople.name',
+    descriptionKey: 'armies.seapeople.description',
+    defaultQuantities: { SPEARMEN: 5, HEAVY_INFANTRY: 4, LIGHT_INFANTRY: 4, ARCHERS: 2 },
+    unitArtwork: {
+      ARCHERS: archersSeaPeoples,
+      LIGHT_INFANTRY: lightInfantrySeaPeoples,
+      HEAVY_INFANTRY: heavyInfantrySeaPeoples,
+      SPEARMEN: seapeopleSpearmen,
+    },
+    battlefieldArtwork: {
+      ARCHERS: battlefieldArchersSeaPeoples,
+      LIGHT_INFANTRY: battlefieldLightInfantrySeaPeoples,
+      HEAVY_INFANTRY: battlefieldHeavyInfantrySeaPeoples,
+      SPEARMEN: battlefieldSeapeopleSpearmen,
     },
   },
 ];
@@ -112,6 +168,9 @@ export function getBattlefieldUnitArtworkForFaction(unitCode, faction) {
 }
 
 export function getUnitTypesForDesign(unitTypes, designId) {
-  const profileKey = getArmyDesign(designId).faction.toLowerCase();
-  return unitTypes.map((unit) => ({ ...unit, ...(unit.profiles?.[profileKey] || {}) }));
+  const design = getArmyDesign(designId);
+  const profileKey = design.faction.toLowerCase();
+  return unitTypes
+    .filter((unit) => Boolean(design.unitArtwork[unit.code]))
+    .map((unit) => ({ ...unit, ...(unit.profiles?.[profileKey] || {}) }));
 }

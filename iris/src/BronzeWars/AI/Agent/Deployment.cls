@@ -2,9 +2,9 @@ Class BronzeWars.AI.Agent.Deployment Extends %AI.Agent
 {
 
 Parameter ProviderName = "nim";
-Parameter BaseURL = "http://llama:8000/v1";
+Parameter BaseURL = "http://qwen:8000/v1";
 Parameter APIKEY = "not-needed";
-Parameter MODEL = "llama-3.1-8b-instruct";
+Parameter MODEL = "qwen3.5-9b";
 Parameter MaxTokens = 400;
 Parameter TopP = 0.9;
 

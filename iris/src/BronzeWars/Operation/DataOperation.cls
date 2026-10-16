@@ -861,21 +861,20 @@ Method EvaluateBattleConclusion(battle As BronzeWars.Model.Battle, Output surren
         return ..FinalizeBattle(battle, humanArmy, aiArmy, "ANNIHILATION", "")
     }
     set surrenderEvaluation = ##class(BronzeWars.Rules.Surrender).Evaluate(aiMetrics.armyMorale, aiMetrics.troopPercentage, aiMetrics.moralePercentage, aiMetrics.survivingSoldiers, humanMetrics.survivingSoldiers, aiArmy.SurrenderPressureTurns)
-    if (surrenderEvaluation.surrenderPressureTurns>aiArmy.SurrenderPressureTurns) && (aiArmy.SurrenderPressureRound=battle.CurrentRound) {
-        set surrenderEvaluation.surrenderPressureTurns = aiArmy.SurrenderPressureTurns
-        set surrenderEvaluation.surrendered = 0
-        do surrenderEvaluation.%Set("reason", "", "null")
-    } elseif surrenderEvaluation.surrenderPressureTurns>aiArmy.SurrenderPressureTurns {
-        set aiArmy.SurrenderPressureRound = battle.CurrentRound
-    } elseif surrenderEvaluation.surrenderPressureTurns=0 {
-        set aiArmy.SurrenderPressureRound = ""
-    }
-    set aiArmy.SurrenderPressureTurns = surrenderEvaluation.surrenderPressureTurns
+    set aiArmy.SurrenderPressureTurns = 0, aiArmy.SurrenderPressureRound = ""
     set sc = aiArmy.%Save()
+    if $SYSTEM.Status.IsError(sc) return sc
+    set humanArmy.SurrenderPressureTurns = 0, humanArmy.SurrenderPressureRound = ""
+    set sc = humanArmy.%Save()
     if $SYSTEM.Status.IsError(sc) return sc
 
     if humanMetrics.survivingSoldiers <= 0 return ..FinalizeBattle(battle, aiArmy, humanArmy, "ANNIHILATION", "")
     if surrenderEvaluation.surrendered return ..FinalizeBattle(battle, humanArmy, aiArmy, "SURRENDER", surrenderEvaluation.reason)
+    set humanEvaluation = ##class(BronzeWars.Rules.Surrender).EvaluateArmies(humanArmy, aiArmy)
+    if humanEvaluation.surrendered {
+        set surrenderEvaluation = humanEvaluation
+        return ..FinalizeBattle(battle, aiArmy, humanArmy, "SURRENDER", surrenderEvaluation.reason)
+    }
     return $$$OK
 }
 

@@ -1,2 +1,3 @@
 iris/shared/durable
-models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+models/Qwen3.5-9B-Q5_K_M.gguf
+webgateway/shared/durable/webgateway/logs/CSP.log
