@@ -36,7 +36,7 @@ test('merging preserves the destination identity, weights morale by troops, save
   assert.equal(armyTroops(combined.armies[0]), 80);
   assert.equal(combined.armies[0].morale, 75);
   assert.equal(combined.armies[0].units[0].quantity, 1);
-  assert.equal(armyUpkeep(combined.armies[0]), 0.6);
+  assert.equal(armyUpkeep(combined.armies[0]), 0.48);
   assert.equal(remainingMovement(combined.armies[0]), 0);
   assert.equal(combined.nextArmyId, original.nextArmyId);
   assert.equal(combined.grain, original.grain);
@@ -147,12 +147,12 @@ test('occupied cities produce exactly half until liberation, harvest only annual
   assert.equal(cityProduction(campaign, city), 2.5);
   assert.equal(campaignProduction(campaign), 22.5);
   let next = nextSeason(campaign);
-  assert.equal(next.grain, 100);
+  assert.equal(next.grain, 40);
   next = nextSeason(next);
-  assert.equal(next.grain, 100);
+  assert.equal(next.grain, 40);
   next = nextSeason(next);
   assert.equal(next.lastTurnReport.producedGrain, 22.5);
-  assert.equal(next.grain, 123);
+  assert.equal(next.grain, 63);
   assert.equal(cityProduction({ ...campaign, cityOwners: {} }, city), 5);
   const raider = { ...state([army(1, city.hexId, [100], 'hatti')], 'hatti'), cityOwners: campaign.cityOwners };
   const raided = startCityAction(raider, 1, 'raid');

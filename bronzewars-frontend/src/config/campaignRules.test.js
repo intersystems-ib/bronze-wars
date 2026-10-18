@@ -86,11 +86,11 @@ test('recruitment uses free capital-region hexes and subsequent armies share res
   assert.equal(HEX_BY_ID.get(nearby).regionId, HEX_BY_ID.get(capital).regionId);
   const expanded = recruit(state, { LIGHT_INFANTRY: 4 }, 'nubia');
   assert.equal(expanded.armies[1].hexId, nearby);
-  assert.equal(expanded.grain, 60);
+  assert.equal(expanded.grain, 0);
   state = moveArmy(state, 1, reachableHexes(state, 1).keys().next().value);
   assert.equal(findSpawn(state), capital);
   state = recruit(state, { LIGHT_INFANTRY: 4 }, 'nubia');
-  assert.equal(state.grain, 60);
+  assert.equal(state.grain, 0);
   assert.equal(state.armies.length, 2);
   assert.equal(state.armies[1].hexId, capital);
   assert.equal(new Set(state.armies.map((army) => army.hexId)).size, 2);
@@ -311,7 +311,7 @@ test('only cities produce grain and Egyptian production accumulates annually', (
 
 test('annual harvest pays once across saved games while upkeep remains seasonal for every playable nation', () => {
   for (const nation of ['egypt', 'hatti', 'nubia']) {
-    let state = recruitArmy(newCampaign(nation), { name: 'Guard', designId: nation, quantities: { LIGHT_INFANTRY: 4 } }, [{ ...catalogue[0], grainCost: 10 }]);
+    let state = recruitArmy({ ...newCampaign(nation), grain: 100 }, { name: 'Guard', designId: nation, quantities: { LIGHT_INFANTRY: 4 } }, [{ ...catalogue[0], grainCost: 10 }]);
     const production = campaignProduction(state);
     for (let turn = 1; turn <= 4; turn += 1) {
       state = nextSeason(loadCampaign({ getItem: () => JSON.stringify(state) }, nation));
@@ -371,7 +371,7 @@ test('Egypt includes the Nile corridor through visible row 34; Nubia begins at r
 
 test('national border paths are unique and use yellow, blue and purple on their respective sides', () => {
   assert.equal(new Set(CAMPAIGN_BORDERS.map((border) => border.id)).size, CAMPAIGN_BORDERS.length);
-  assert.deepEqual(CAMPAIGN_NATIONS, { egypt: { color: '#f5d52b' }, hatti: { color: '#428fff' }, nubia: { color: '#b55de8' } });
+  assert.deepEqual(CAMPAIGN_NATIONS, { egypt: { color: '#f5d52b' }, hatti: { color: '#428fff' }, nubia: { color: '#b55de8' }, seapeople: { color: '#43c7bf' } });
   for (const id of ['egypt', 'hatti', 'nubia']) assert.ok(CAMPAIGN_BORDERS.some((border) => border.territory === id));
   assert.ok(CAMPAIGN_BORDERS.every((border) => !isSinai(HEX_BY_ID.get(border.hexId))));
   assert.ok(CAMPAIGN_BORDERS.some((border) => border.hexId === '7,33' && border.territory === 'egypt'));

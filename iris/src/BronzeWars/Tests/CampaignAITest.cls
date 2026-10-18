@@ -1,6 +1,18 @@
 Class BronzeWars.Tests.CampaignAITest Extends %UnitTest.TestCase
 {
 
+Method TestSeaPeoplesRecruitment()
+{
+    set capacity={"nation":"seapeople","reserve":100,"annualProduction":0,"consumptionPerTurn":2,"annualConsumption":6,"troops":240,"maxAffordableTroops":0,"maxSustainableTroops":0,"turn":6,"turnsToHarvest":3,"capitalAvailable":false,"deploymentArea":"capital_region","freeDeploymentHexes":0,"units":[{"code":"LIGHT_INFANTRY","cost":6,"maxAffordable":0}],"options":[]}
+    set result=##class(BronzeWars.AI.CampaignRecruitment).Decide(capacity)
+    do $$$AssertTrue(result.ok,"Sea Peoples are an accepted AI nation")
+    do $$$AssertEquals(result.data.blockReason,"NO_CAPITAL","Ships cannot recruit before founding a capital")
+    do $$$AssertEquals(result.data.source,"RULES","No unnecessary model request before the first conquest")
+    do capacity.%Set("capitalCityId","hatti-2")
+    set capacity.annualProduction=4, capacity.consumptionPerTurn=0.6
+    do $$$AssertEquals(##class(BronzeWars.AI.CampaignRecruitment).RecruitmentBlock(capacity),"","A founded capital permits normal economic recruitment")
+}
+
 Method TestDeploymentContextVersion()
 {
     set legacy = {"capitalAvailable":false}

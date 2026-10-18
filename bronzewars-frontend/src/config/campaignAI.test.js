@@ -10,12 +10,31 @@ const catalogue = [
 ];
 const recruit = (quantities = { LIGHT_INFANTRY: 4 }) => ({ action: 'recruit', quantities, reason: 'Defender la capital' });
 
+test('rival recruitment planning and seasonal settlement charge surviving troops proportionally', () => {
+  for (const nation of ['hatti', 'nubia']) {
+    const state = applyRecruitmentDecision(initializeCampaignAI(newCampaign()), nation, recruit(), catalogue);
+    state.foreignGrain[nation] = 1000;
+    const full = recruitmentCapacity(state, nation, catalogue);
+    assert.equal(full.consumptionPerTurn, 2.4);
+    state.armies[0].units[0].strengths = [30, 30, 30, 30];
+    const depleted = recruitmentCapacity(state, nation, catalogue);
+    assert.equal(depleted.consumptionPerTurn, 1.2);
+    assert.ok(Math.abs(depleted.annualConsumption - 3.6) < 1e-9);
+    assert.ok(depleted.maxSustainableTroops > full.maxSustainableTroops);
+    state.foreignGrain[nation] = 10;
+    const next = nextSeason(state);
+    assert.equal(next.foreignGrain[nation], 9);
+    assert.ok(armyTroops(next.armies[0]) > 120);
+    assert.ok(recruitmentCapacity(next, nation, catalogue).consumptionPerTurn > 1.2);
+  }
+});
+
 test('each rival starts with an independent reserve, preserving old loot and excluding Sea Peoples', () => {
   const original = { ...newCampaign('nubia'), foreignGrain: { egypt: 12 } };
   const state = initializeCampaignAI(original);
   assert.deepEqual(rivalNations(state), ['egypt', 'hatti']);
   assert.deepEqual(state.foreignGrain, { egypt: 12, hatti: 100 });
-  assert.equal(state.grain, 100);
+  assert.equal(state.grain, 40);
   assert.deepEqual(initializeCampaignAI(state), state);
   assert.equal(original.foreignGrain.hatti, undefined);
 });
@@ -48,11 +67,11 @@ test('capacity maximizes actual force with integer costs and formation limits ra
   assert.equal(maxRecruitableTroops([{ grainCost: 1, initialStrength: 100 }], 1000), 9900);
   const state = initializeCampaignAI(newCampaign());
   const capacity = recruitmentCapacity(state, 'nubia', catalogue);
-  assert.equal(capacity.reserve, 100);
+  assert.equal(capacity.reserve, 40);
   assert.equal(capacity.annualProduction, 20);
   assert.equal(capacity.turnsToHarvest, 3);
-  assert.equal(capacity.maxAffordableTroops, 1600);
-  assert.equal(capacity.maxSustainableTroops, 1100);
+  assert.equal(capacity.maxAffordableTroops, 600);
+  assert.equal(capacity.maxSustainableTroops, 600);
   assert.equal(capacity.consumptionPerTurn, 0);
   assert.equal(capacity.troops, 0);
   for (const option of capacity.options) {
@@ -78,7 +97,7 @@ test('annual production and the cheapest four-division army gate model recruitme
   assert.equal(skipped.aiRecruitment.nubia.source, 'RULES');
   assert.equal(skipped.aiRecruitment.nubia.blockReason, 'INSUFFICIENT_GRAIN');
   assert.deepEqual(skipped.armies, state.armies);
-  assert.equal(skipped.foreignGrain.nubia, 100);
+  assert.equal(skipped.foreignGrain.nubia, 40);
   assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(skipped) }), skipped);
 });
 
@@ -102,7 +121,7 @@ test('minimum army costs use national prices, rounded reserves, and allow four d
 });
 
 test('recruitment may exceed sustainable capacity once, but the next deficit blocks further recruitment', () => {
-  const initial = initializeCampaignAI(newCampaign());
+  const initial = initializeCampaignAI({ ...newCampaign(), foreignGrain: { nubia: 100 } });
   let state = applyRecruitmentDecision(initial, 'nubia', recruit({ SPEARMEN: 16 }), catalogue);
   assert.equal(state.grain, 100);
   assert.equal(state.foreignGrain.nubia, 4);
@@ -129,12 +148,12 @@ test('wait, invalid orders, full capital regions and duplicate decisions never c
   }
   const waiting = applyRecruitmentDecision(state, 'nubia', { action: 'wait', reason: 'Ahorrar' }, catalogue);
   assert.equal(waiting.armies.length, 0);
-  assert.equal(waiting.foreignGrain.nubia, 100);
+  assert.equal(waiting.foreignGrain.nubia, 40);
   assert.equal(applyRecruitmentDecision(waiting, 'nubia', recruit(), catalogue), waiting);
   assert.equal(applyRecruitmentDecision(state, 'egypt', recruit(), catalogue), state);
   assert.equal(applyRecruitmentDecision(state, 'seapeople', recruit(), catalogue), state);
   const occupied = applyRecruitmentDecision(state, 'nubia', recruit(), catalogue);
-  const second = applyRecruitmentDecision({ ...occupied, turn: 1 }, 'nubia', recruit(), catalogue);
+  const second = applyRecruitmentDecision({ ...occupied, turn: 1, foreignGrain: { ...occupied.foreignGrain, nubia: 100 } }, 'nubia', recruit(), catalogue);
   assert.equal(second.armies.length, 2);
   assert.notEqual(second.armies[0].hexId, second.armies[1].hexId);
   const regionId = CAMPAIGN_HEXES.find((hex) => hex.id === occupied.armies[0].hexId).regionId;
@@ -153,7 +172,7 @@ test('rivals pay upkeep every season, harvest only annually and preserve indepen
     assert.equal(state.lastTurnReport.requiredGrain, 0);
     assert.equal(state.lastTurnReport.armies.length, 0);
   }
-  assert.equal(state.foreignGrain.nubia, 120);
+  assert.equal(state.foreignGrain.nubia, 60);
   assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(state) }), state);
   const invalid = { ...state, aiRecruitment: { hatti: { turn: 999, action: 'wait', reason: '' } } };
   assert.equal(loadCampaign({ getItem: () => JSON.stringify(invalid) }, 'egypt', { fallbackToNew: false }), null);
@@ -179,4 +198,16 @@ test('debug reveal shows remote enemy formations without changing normal human o
   assert.equal(debug.armies[0].units, undefined);
   assert.deepEqual(campaignView(state), normal);
   assert.equal(campaignView(state, 'hatti').armies.length, 0);
+});
+
+
+test('Nubia starts with 40 grain for humans and AI without overwriting saved reserves', () => {
+  assert.equal(newCampaign('nubia').grain, 40);
+  const fresh = initializeCampaignAI(newCampaign('egypt'));
+  assert.equal(fresh.foreignGrain.nubia, 40);
+  assert.equal(fresh.foreignGrain.hatti, 100);
+  assert.equal(recruitmentCapacity(newCampaign(), 'nubia', catalogue).reserve, 40);
+  const saved = { ...newCampaign('nubia'), grain: 73, foreignGrain: { hatti: 9, egypt: 12 } };
+  assert.equal(loadCampaign({ getItem: () => JSON.stringify(saved) }, 'nubia').grain, 73);
+  assert.equal(initializeCampaignAI({ ...newCampaign(), foreignGrain: { nubia: 81 } }).foreignGrain.nubia, 81);
 });

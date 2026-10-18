@@ -51,23 +51,12 @@
 .campaign-grain small { color: var(--muted); text-transform: uppercase; font-size: .65rem; letter-spacing: .06em; }
 .campaign-grain-help, .campaign-muted { font-size: .73rem; line-height: 1.6; color: var(--muted); margin: .7rem 0 1.2rem; }
 .campaign-upkeep { font-size: .78rem; color: #d7bc86; margin: .7rem 0; }
-.campaign-situation { font-size: .73rem; line-height: 1.6; margin: .7rem 0 1.2rem; }
-.campaign-situation.is-famine { color: #efab86; }
-.campaign-situation.is-scarcity { color: #dcc589; }
-.campaign-situation.is-abundance, .campaign-recovery { color: #a8c98e; }
 .campaign-upkeep.is-short, .campaign-supply-warning { color: #efab86; }
 .campaign-supply-warning { font-size: .73rem; line-height: 1.6; }
 .campaign-terrain-info { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; padding: .7rem .9rem; border-bottom: 1px solid var(--line); font-size: .72rem; color: var(--muted); }
 .campaign-terrain-info strong { color: #d8d5a3; }
 .campaign-terrain-info.terrain--desert strong { color: #ecc180; }
 .campaign-terrain-info.terrain--mountain strong { color: #d4c0b0; }
-.campaign-turn-report { margin-top: 1rem; padding: 1rem 1.25rem; }
-.campaign-turn-report h2 { font-size: 1.05rem; margin-bottom: .65rem; }
-.campaign-turn-report p { font-size: .78rem; margin-bottom: .6rem; }
-.campaign-turn-report ul { list-style: none; padding: 0; margin: 0; display: grid; gap: .6rem; }
-.campaign-turn-report li { display: flex; flex-wrap: wrap; gap: .5rem 1rem; font-size: .75rem; }
-.campaign-turn-report li span { color: var(--muted); }
-.campaign-turn-report em { color: var(--danger); font-style: normal; }
 .campaign-armies-heading { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 1.1rem; margin-bottom: 1rem; }
 .campaign-armies-heading h2 { font-size: 1.05rem; }
 .campaign-armies-heading > span { color: var(--bronze-bright); font-size: .8rem; }
@@ -127,7 +116,6 @@
 .campaign-city-actions progress { width: 100%; accent-color: var(--bronze-bright); }
 .campaign-city-lost { color: #efab86; }
 .campaign-hex .campaign-city-owner { stroke: #f4ddb4; stroke-width: 1; }
-.campaign-save-note { margin: 1.2rem 0 0; border-top: 1px solid var(--line); padding-top: .8rem; font-size: .65rem; line-height: 1.5; color: var(--muted); }
 .campaign-map-panel { overflow: hidden; min-width: 0; }
 .campaign-map-toolbar { display: flex; justify-content: space-between; align-items: center; padding: .7rem .9rem; gap: .75rem; border-bottom: 1px solid var(--line); }
 .campaign-map-toolbar p { margin: 0; color: var(--muted); font-size: .73rem; }
@@ -151,7 +139,6 @@
 .campaign-army-marker circle { fill: color-mix(in srgb, var(--army-nation-color) 35%, white); stroke: none; }
 .campaign-army-marker .campaign-army-outline { fill: none; stroke: var(--army-nation-color); stroke-width: 3; }
 .campaign-army-marker text { fill: white; stroke: #281d0e; stroke-width: 3; paint-order: stroke; font: bold 13px system-ui; }
-.campaign-fog-help { padding: 0 .9rem .8rem; margin: 0; color: var(--muted); font-size: .68rem; line-height: 1.5; }
 .campaign-enemy-contact { color: #efab86 !important; }
 .campaign-city { pointer-events: none; }
 .campaign-hex .campaign-city .campaign-capital-ring { fill: #302516; fill-opacity: .55; stroke-width: 2; }
@@ -207,3 +194,13 @@
 .campaign-merge-dialog { width: min(34rem, calc(100vw - 2rem)); margin: auto; padding: 2rem; color: var(--text); }
 .campaign-merge-dialog::backdrop { background: rgb(0 0 0 / 75%); }
 .campaign-merge-dialog p { color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
+
+.campaign-retreat-status { color: #edb88d; font-size: .85rem; line-height: 1.5; }
+
+.campaign-army-marker .campaign-retreat-mark { fill: #ffd49b; font-size: 20px; stroke: #3b2115; }
+
+.campaign-modifiers { color: var(--muted); font-size: .78rem; line-height: 1.6; margin: .7rem 0 1.2rem; }
+.campaign-modifiers.has-multiple .campaign-modifier { display: block; }
+.campaign-modifier.is-positive { color: #a8d58d; }
+.campaign-modifier.is-negative { color: #f08b83; }
+.campaign-modifier.is-neutral { color: var(--muted); }

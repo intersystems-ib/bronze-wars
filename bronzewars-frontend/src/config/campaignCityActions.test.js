@@ -158,9 +158,9 @@ test('enemy AI actions use the same rules: raids credit the enemy and assaults c
   assert.deepEqual(state.lastTurnReport.capturedCities, [{ cityId: target.id, previousOwner: 'egypt', newOwner: 'hatti' }]);
 });
 
-test('Sea Peoples can raid but cannot gain permanent territory', () => {
+test('Sea Peoples can raid and assault cities to gain territory', () => {
   const state = { ...stationed(1000, 'seapeople'), nation: 'egypt' };
-  assert.equal(startCityAction(state, 1, 'assault', 'seapeople'), state);
+  assert.equal(startCityAction(state, 1, 'assault', 'seapeople').armies[0].cityAction.type, 'assault');
   const raided = startCityAction(state, 1, 'raid', 'seapeople');
   assert.equal(nationGrain(raided, 'seapeople'), target.grain);
   assert.equal(cityOwner(raided, target), 'egypt');
@@ -181,7 +181,7 @@ test('save/load preserves annual raid markers, siege progress and ownership; mal
   assert.equal(cityOwner(readCampaignSave(storage, record.id).campaign, target), 'nubia');
   for (const invalid of [
     { ...state, cityOwners: { unknown: 'egypt' } },
-    { ...state, cityOwners: { [target.id]: 'seapeople' } },
+    { ...state, cityOwners: { [target.id]: 'unknown' } },
     { ...state, cityRaids: { [target.id]: { year: 100, nation: 'nubia' } } },
     { ...state, armies: [{ ...state.armies[0], cityAction: { ...state.armies[0].cityAction, turnsElapsed: -1 } }] },
     { ...state, armies: [{ ...state.armies[0], cityAction: { ...state.armies[0].cityAction, turnsRequired: 1 } }] },

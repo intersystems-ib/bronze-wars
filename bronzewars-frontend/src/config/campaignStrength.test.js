@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { LEGACY_HATTI_ID, normalizeFaction } from './nationIdentity.js';
-import { CAMPAIGN_HEXES, HEX_BY_ID, PLAYABLE_NATIONS, availableGrain, campaignStorageKey, findSpawn, armyTroops, activeUnitCount, unitTroops, migrateCampaignStrength, armyMovement, armyUpkeep, campaignEconomy, campaignProduction, applyCasualties, recoverCasualties, loadCampaign, newCampaign, nextSeason, recruitArmy } from './campaignRules.js';
+import { CAMPAIGN_HEXES, HEX_BY_ID, PLAYABLE_NATIONS, availableGrain, campaignStorageKey, findSpawn, armyTroops, activeUnitCount, unitTroops, migrateCampaignStrength, armyMovement, armyUpkeep, campaignUpkeep, campaignEconomy, campaignProduction, applyCasualties, recoverCasualties, loadCampaign, newCampaign, nextSeason, recruitArmy } from './campaignRules.js';
 
 const catalogue = [
   { code: 'LIGHT_INFANTRY', initialStrength: 60, speed: 2, grainCost: 6, attack: 4, defense: 2, damage: 5 },
@@ -42,7 +42,7 @@ test('5% famine losses are based on troops, including rounding up and multiple f
   assert.equal(armyTroops(next.armies[0]), 114);
   assert.deepEqual(next.armies[0].units[0].strengths, [57,57]);
   assert.equal(activeUnitCount(next.armies[0].units[0]), 2);
-  assert.equal(armyUpkeep(next.armies[0]), 1.2);
+  assert.equal(armyUpkeep(next.armies[0]), 1.14);
 });
 
 test('terrain and famine apply sequentially to surviving troop strength', () => {
@@ -69,7 +69,7 @@ test('individual formations only cease being deployed when their force reaches z
   assert.equal(activeUnitCount(state.armies[0].units[0]), 1);
   assert.equal(armyTroops(state.armies[0]), 101);
   assert.equal(armyMovement(state.armies[0].units), 1.5);
-  assert.equal(armyUpkeep(state.armies[0]), 1.2);
+  assert.equal(armyUpkeep(state.armies[0]), 0.61);
   const result = applyCasualties(state.armies[0].units, 1);
   assert.equal(result.losses, 101);
   assert.ok(result.units.every((unit) => activeUnitCount(unit) === 0));
@@ -166,7 +166,7 @@ test('saved individual strength and caps restore exactly and invalid forces are 
   }
 });
 
-test('situation and grain settlement remain independent of individual troop losses', () => {
+test('settlement charges starting force and casualties reduce the next turn upkeep', () => {
   const state = armyWith({ LIGHT_INFANTRY: 2 });
   assert.equal(campaignEconomy(state, 2).situation, 'abundance');
   assert.equal(campaignEconomy(state, 1).situation, 'scarcity');
@@ -177,7 +177,7 @@ test('situation and grain settlement remain independent of individual troop loss
   const next = nextSeason(state);
   assert.equal(next.grain, Math.ceil(production - 1.2));
   assert.equal(armyTroops(next.armies[0]), 114);
-  assert.equal(armyUpkeep(next.armies[0]), 1.2);
+  assert.equal(armyUpkeep(next.armies[0]), 1.14);
 });
 
 test('27.8 grain funds a 28-grain army, leaves zero and cannot fund a 29-grain army', () => {
@@ -236,7 +236,7 @@ test('each nation uses an independent save and legacy Egyptian progress is prese
   assert.equal(loadCampaign({ getItem: () => null }, 'nubia').nation, 'nubia');
 });
 
-test('Sea Peoples cannot be selected for campaigns, recruit armies or own productive territory', () => {
+test('Sea Peoples cannot be selected and start without territory or a recruitment capital', () => {
   assert.deepEqual(PLAYABLE_NATIONS, ['egypt', 'hatti', 'nubia']);
   const state = newCampaign('seapeople');
   assert.equal(findSpawn(state), null);
@@ -271,4 +271,34 @@ test('legacy enemy identities in another nation’s save also become Hittite', (
   const restored = loadCampaign({ getItem: () => JSON.stringify(state) });
   assert.equal(restored.nation, 'egypt');
   assert.equal(restored.armies[0].designId, 'hatti');
+});
+
+
+test('upkeep scales each troop type by its own strength and cost for every nation', () => {
+  for (const nation of PLAYABLE_NATIONS) {
+    const state = armyWith({ LIGHT_INFANTRY: 2, CHARIOTS: 2 });
+    state.nation = nation;
+    state.armies[0].designId = nation;
+    assert.equal(campaignUpkeep(state), 6.2);
+    state.armies[0].units[0].strengths = [60, 0];
+    state.armies[0].units[1].strengths = [15, 0];
+    assert.equal(campaignUpkeep(state), 3.1);
+    state.armies[0].units[0].strengths = [30, 0];
+    state.armies[0].units[1].strengths = [15, 0];
+    // Half an infantry formation costs 0.3; a full chariot formation costs 2.5.
+    assert.equal(campaignUpkeep(state), 2.8);
+    state.armies[0].units[1].strengths = [0, 0];
+    assert.equal(campaignUpkeep(state), 0.3);
+    state.armies[0].units[0].strengths = [0, 0];
+    assert.equal(campaignUpkeep(state), 0);
+  }
+});
+
+test('national upkeep rounds after combining all armies, independently of troop grouping', () => {
+  const group = { ...catalogue[2], initialStrength: 60, grainCost: 7, quantity: 1, strengths: [1] };
+  const state = armyWith({ CHARIOTS: 1 });
+  state.armies = Array.from({ length: 4 }, (_, id) => ({ ...state.armies[0], id, units: [group] }));
+  assert.equal(campaignUpkeep(state), 0.05);
+  const combined = { ...state, armies: [{ ...state.armies[0], units: [{ ...group, quantity: 1, strengths: [4] }] }] };
+  assert.equal(campaignUpkeep(combined), campaignUpkeep(state));
 });

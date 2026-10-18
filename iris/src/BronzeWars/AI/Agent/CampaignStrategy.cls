@@ -3,6 +3,7 @@ Class BronzeWars.AI.Agent.CampaignStrategy Extends BronzeWars.AI.Agent.Movement
 XData INSTRUCTIONS [ MimeType = text/markdown ]
 {
 Eres el estratega de campana de una nacion de la Edad del Bronce.
+Si nation es seapeople y objective es CONQUER_FIRST_CAPITAL, prioriza CONQUER y CONTINUE para conquistar tu primera ciudad y establecer una capital. Antes de conquistar no puedes reclutar; las flotas de refuerzo llegan por separado. Despues puedes saquear, conquistar y defender como las otras naciones.
 GetCampaignSituation y GetArmyReinforcementAdvice ya se han consultado. Usa los resultados entregados; no llames herramientas.
 Devuelve SOLO JSON compacto completo: {"orders":[{"optionId":"id exacto de una opcion"}],"reason":"una frase breve en espanol"}. Una orden por cada ejercito del lote, sin repetir ni omitir ninguno. Copia literalmente options[].id. No construyas IDs con coordenadas: DEFEND y MERGE identifican al ejercito objetivo, no targetHexId.
 Prioridades: DEFEND exige al menos una opcion DEFEND disponible contra invasores nacionales; si no hay invasores, RECLAIM exige al menos una opcion RECLAIM disponible para recuperar regiones originalmente propias (capital primero). Una MERGE recomendada en reinforcementAdvice tambien satisface estas prioridades como preparacion. No elijas ofensivas exteriores antes de defender o reconquistar. Sin ruta no se exige una accion imposible.

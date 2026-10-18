@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import egyptMap from '../assets/map/egypt.png';
 import cityArtwork from '../assets/map/city.png';
+import seaPeopleShip from '../assets/units/ship_seapeople.png';
+import { advanceSeaInvasions } from '../config/campaignSeaPeoples';
 import { movementContext, needsMovementDecision, storeMovementDecision, pendingMovementOrder, executeMovementOrder, skipMovement, engageArmy, encounterPayload } from '../config/campaignMovement';
 import { resolveAIEncounter, pendingCombatReports, acknowledgeCombatReport } from '../config/campaignCombat';
+import { advanceCampaignRetreats, hasRetreatMovements } from '../config/campaignRetreat';
+import { campaignModifiers } from '../config/campaignModifiers';
+import { randomArmyName } from '../config/campaignArmyNames';
 import { hexDistance } from '../config/campaignVisibility';
 import { campaignView } from '../config/campaignVisibility';
 import { disbandArmy, terrainAttrition, mergeArmies } from '../config/campaignRules';
@@ -53,7 +58,6 @@ function TerrainDetails({ hex, campaign, contact, onBack, children }) {
     </dl>
     {territory.occupied && <p>{t('campaign.occupation.effects')}</p>}
     <p>{t(terrain.difficult ? 'campaign.difficultMovement' : hex.land ? 'campaign.normalMovement' : 'campaign.impassable')}</p>
-    <small>{t('campaign.productionActive')}</small>
     <button className="button button--secondary" type="button" onClick={onBack}>{t('campaign.backToArmies')}</button>
   </section>;
 }
@@ -83,18 +87,19 @@ function CampaignDecisionModal({ phase, revealMap, onContinue }) {
       <p className="campaign-ai-victor">{t('campaign.combat.victor', { nation: t(`campaign.nations.${result.winnerNation}`) })}</p>
       <p>{t('campaign.combat.nationLosses', { nation: t(`campaign.nations.${result.winnerNation}`), count: result.winnerLosses })}</p>
       <p>{t('campaign.combat.nationLosses', { nation: t(`campaign.nations.${result.loserNation}`), count: result.loserLosses })}</p>
-      <p>{t(result.retreatHexId ? 'campaign.combat.defeatedRetreats' : 'campaign.combat.defeatedDestroyed', { nation: t(`campaign.nations.${result.loserNation}`) })}</p>
+      <p>{t(result.retreatCityId ? 'campaign.combat.retreatsToCity' : result.retreatHexId ? 'campaign.combat.defeatedRetreats' : 'campaign.combat.defeatedDestroyed', { nation: t(`campaign.nations.${result.loserNation}`), city: result.retreatCityId ? t(`campaign.cityNames.${result.retreatCityId}`) : '' })}</p>
       <button autoFocus className="button button--primary" type="button" onClick={onContinue}>{t('campaign.combat.continue')}</button>
     </section> : <progress aria-label={t(`campaign.ai.${phase.kind || 'recruitment'}Phase`)} />}
     {revealMap && phase.kind === 'recruitment' && <p className="campaign-muted">{t('campaign.ai.deploymentSpace', { count: phase.freeHexes })}</p>}
   </dialog>;
 }
 
-function ArmyRecruitment({ grain, nation, capital, unitTypes, loading, onClose, onRecruit }) {
+function ArmyRecruitment({ grain, nation, capital, armies, unitTypes, loading, onClose, onRecruit }) {
   const { t, language } = useI18n();
   const dialog = useRef(null);
   const designId = nation;
-  const [name, setName] = useState('');
+  const [suggestedName] = useState(() => randomArmyName(nation, armies, { language }));
+  const [name, setName] = useState(suggestedName);
   const [customQuantities, setCustomQuantities] = useState(null);
   const available = getUnitTypesForDesign(unitTypes, designId).filter((unit) => unit.code !== 'MERCENARIES');
   const design = getArmyDesign(designId);
@@ -136,9 +141,9 @@ function ArmyRecruitment({ grain, nation, capital, unitTypes, loading, onClose, 
           <div><p className="eyebrow">{t('campaign.muster')}</p><h2 id="recruit-title">{t('campaign.createArmy')}</h2></div>
           <button type="button" className="encounter-modal__close" onClick={onClose} aria-label={t('app.close')}>×</button>
         </div>
-        <form onSubmit={(event) => { event.preventDefault(); if (valid) onRecruit({ name, designId, quantities }, available); }}>
+        <form onSubmit={(event) => { event.preventDefault(); if (valid) onRecruit({ name: name.trim() || suggestedName, designId, quantities, language }, available); }}>
           <div className="campaign-recruit-fields">
-            <label className="field"><span>{t('campaign.armyName')}</span><input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder={t('campaign.defaultArmyName', { number: 1 })} /></label>
+            <label className="field"><span>{t('campaign.armyName')}</span><input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder={suggestedName} /></label>
             <div className="field"><span>{t('campaign.nation')}</span><div className="campaign-recruit-nation"><img src={design.logo} alt="" /><strong>{t(`campaign.nations.${nation}`)}</strong></div></div>
           </div>
           <ArmyBuilder unitTypes={available} quantities={quantities} armyDesignId={designId} loading={loading} budget={grain} onChange={setCustomQuantities} />
@@ -235,7 +240,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
   const view = useMemo(() => campaignView(campaign, nation, { reveal: revealMap }), [campaign, nation, revealMap]);
   const ownArmies = useMemo(() => campaign.armies.filter((army) => army.designId === nation), [campaign.armies, nation]);
   const selected = ownArmies.find((army) => army.id === selectedId);
-  const aiPending = pendingCombatReports(campaign).length > 0 || rivalNations(campaign).some((rival) => needsRecruitmentDecision(campaign, rival) || needsMovementDecision(campaign, rival));
+  const aiPending = hasRetreatMovements(campaign) || pendingCombatReports(campaign).length > 0 || rivalNations(campaign).some((rival) => needsRecruitmentDecision(campaign, rival) || needsMovementDecision(campaign, rival));
   const campaignReady = campaign.version === 2 && !aiPending && !aiBusy && !campaign.pendingEncounter;
   const inspectedHex = HEX_BY_ID.get(inspectedId);
   const capital = campaignCapital(campaign, nation);
@@ -249,9 +254,8 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
   const mapBorders = useMemo(() => buildBorders(CAMPAIGN_HEXES.map((hex) => ({ ...hex, territory: campaignTerritory(campaign, hex) }))), [campaign.cityOwners]);
   const terrain = TERRAIN_TYPES[inspectedHex.terrain];
   const economy = campaignEconomy(campaign);
-  const formatGrain = (value) => value.toLocaleString(language, { maximumFractionDigits: 2 });
   const formatConsumption = (value) => value.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 2 });
-  const report = campaign.lastTurnReport;
+  const modifiers = campaignModifiers(campaign, selected);
   const reachable = useMemo(() => reachableHexes(campaign, selectedId), [campaign, selectedId]);
   const occupied = useMemo(() => new Map(view.armies.map((army) => [army.hexId, army])), [view]);
   const grain = availableGrain(campaign.grain);
@@ -270,6 +274,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
       setAiBusy(true);
       setAiErrors([]);
       let current = migrateCampaignStrength(initializeCampaignAI(campaign), unitTypes);
+      current = initializeCampaignAI(advanceSeaInvasions(current, getUnitTypesForDesign(unitTypes, 'seapeople'), { language }));
       const persist = (next) => {
         current = next;
         writeCampaignSave(localStorage, initialSave, current);
@@ -288,8 +293,9 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
         return true;
       }
       try {
-        if (current.pendingEncounter) current = resolveAIEncounter(current);
         persist(current);
+        if (current.pendingEncounter) current = resolveAIEncounter(current);
+        persist(advanceCampaignRetreats(current));
         if (!await showCombatResults({ index: 0, total: Math.max(1, rivals.length) }) || !active) return;
         for (const [index, rival] of rivals.entries()) {
           let phase = 'recruitment';
@@ -303,7 +309,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
                 decision = await api.campaignRecruitment(capacity, controller.signal);
               }
               if (!active) return;
-              persist(applyRecruitmentDecision(current, rival, decision, catalogue));
+              persist(applyRecruitmentDecision(current, rival, decision, catalogue, { language }));
             }
             phase = 'movement';
             while (needsMovementDecision(current, rival)) {
@@ -474,7 +480,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
           <div className="campaign-grain"><span className="grain-glyph" aria-hidden="true">&#x131E3;</span><div><strong>{grain}</strong><small>{t('armyBuilder.grainRemaining')}</small></div></div>
           <p className="campaign-upkeep">{t('campaign.upkeep', { grain: formatConsumption(economy.consumption) })}</p>
           <p className="campaign-upkeep">{t('campaign.annualYield', { grain: economy.production })} <span className="grain-glyph" aria-hidden="true">&#x131E3;</span></p>
-          <p className={`campaign-situation is-${economy.situation}`}>{t(`campaign.situations.${economy.situation}`)}</p>
+          <p className={`campaign-modifiers${modifiers.length > 1 ? ' has-multiple' : ''}`}>{t('campaign.modifiers.label')} {modifiers.map(({ kind, value }) => <span key={kind} className={`campaign-modifier is-${value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'}`} title={t(`campaign.modifiers.${kind}`)}>{t('campaign.modifiers.value', { value: value > 0 ? `+${value}` : value })}</span>)}</p>
           {sidebarMode === 'terrain' ? <TerrainDetails hex={inspectedHex} campaign={campaign} contact={occupied.get(inspectedId)} onBack={showArmies}>
             {selected && occupied.get(inspectedId) && !occupied.get(inspectedId).own && hexDistance(selected.hexId, inspectedId) === 1 && <button className="button button--primary" type="button" disabled={!campaignReady || !remainingMovement(selected)} onClick={() => setCampaign((current) => engageArmy(current, selected.id, occupied.get(inspectedId).id))}>{t('campaign.combat.attack')}</button>}
             {inspectingCapital && <>
@@ -496,6 +502,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
               <span><strong>{troops}</strong><small>{morale}</small></span>
             </button>;
           })}</div>
+          {selected?.campaignMission?.intent === 'RETREAT' && <p className="campaign-retreat-status" role="status">{t(selected.campaignMission.targetCityId ? 'campaign.retreatToCity' : 'campaign.retreating', { city: selected.campaignMission.targetCityId ? t(`campaign.cityNames.${selected.campaignMission.targetCityId}`) : '' })}</p>}
           {selected && <div className="campaign-disband">
             {disbandingId === selected.id ? <>
               <p>{t('campaign.disbandHelp')}</p>
@@ -532,7 +539,6 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
           </section>}
           {selected && <button className="button button--secondary" type="button" onClick={showArmies}>{t('campaign.backToArmies')}</button>}
           </>}
-          <p className="campaign-save-note">{t('campaign.savedLocally')}</p>
         </aside>
         <section className="campaign-map-panel panel" aria-label={t('campaign.map')}>
           <div className="campaign-map-toolbar"><p>{selected ? t('campaign.moveHint') : t('campaign.selectHint')}</p><div className="campaign-zoom"><button type="button" disabled={zoom <= 1} onClick={() => setZoom((value) => Math.max(1, value - 0.25))} aria-label={t('battle.zoomOut')}>−</button><button type="button" onClick={() => setZoom(1)} aria-label={t('battle.resetZoom')}>{Math.round(zoom * 100)}%</button><button type="button" disabled={zoom >= 2} onClick={() => setZoom((value) => Math.min(2, value + 0.25))} aria-label={t('battle.zoomIn')}>+</button></div></div>
@@ -552,7 +558,8 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
                 const positionLabel = army ? t('campaign.armyAt', { name: army.own ? `${army.name || t('campaign.defaultArmyName', { number: army.id })} · ${t('campaign.unitCount', { count: army.unitCount })}` : t('campaign.enemyContact', { nation: t(`campaign.nations.${army.designId}`), count: army.unitCount ?? '?' }), col: hex.col + 1, row: hex.row + 1 }) : t('campaign.hex', { col: hex.col + 1, row: hex.row + 1 });
                 const territory = campaignTerritoryInfo(campaign, hex);
                 const occupationLabel = territory.occupied ? t('campaign.occupation.description', { original: t(`campaign.nations.${territory.originalOwner}`), controller: t(`campaign.nations.${territory.controller}`) }) : '';
-                const label = `${occupationLabel ? `${occupationLabel} · ` : ''}${hex.city ? `${cityName(hex.city, t)} · ` : ''}${positionLabel} · ${t(`campaign.terrain.${hex.terrain}`)} · ${t('campaign.terrainAttrition', { rate: terrainAttrition(campaign, hex) * 100 })} · ${t('campaign.productionValue', { amount: hex.city ? cityProduction(campaign, hex.city) : hex.production })} · ${t(TERRAIN_TYPES[hex.terrain].difficult ? 'campaign.difficultMovement' : hex.land ? 'campaign.normalMovement' : 'campaign.impassable')}`;
+                const retreatLabel = army?.retreating || army?.campaignMission?.intent === 'RETREAT' ? `${t('campaign.retreating')} · ` : '';
+                const label = `${retreatLabel}${occupationLabel ? `${occupationLabel} · ` : ''}${hex.city ? `${cityName(hex.city, t)} · ` : ''}${positionLabel} · ${t(`campaign.terrain.${hex.terrain}`)} · ${t('campaign.terrainAttrition', { rate: terrainAttrition(campaign, hex) * 100 })} · ${t('campaign.productionValue', { amount: hex.city ? cityProduction(campaign, hex.city) : hex.production })} · ${t(TERRAIN_TYPES[hex.terrain].difficult ? 'campaign.difficultMovement' : hex.land ? 'campaign.normalMovement' : 'campaign.impassable')}`;
                 return <g key={hex.id} className={`campaign-hex ${!hex.land ? 'is-water' : ''} ${canMove ? 'is-reachable' : ''} ${active ? 'is-selected' : ''} ${army ? 'is-occupied' : ''} ${sidebarMode === 'terrain' && inspectedId === hex.id ? 'is-inspected' : ''}`} role="button" tabIndex={army || hex.city || canMove || inspectedId === hex.id ? 0 : -1} aria-label={label} onClick={() => activateHex(hex)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateHex(hex); } }}>
                   <title>{label}</title><polygon points={hex.points} />
                   {territory.occupied && <polygon points={hex.points} aria-hidden="true" pointerEvents="none" style={{ fill: 'url(#campaign-occupation-pattern)', stroke: 'none' }} />}
@@ -577,26 +584,27 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
                   <circle cx={hex.x} cy={hex.y} r="19" />
                   <image href={getBattlefieldUnitArtwork('LIGHT_INFANTRY', army.designId)} x={hex.x - 18} y={hex.y - 23} width="36" height="42" />
                   <circle className="campaign-army-outline" cx={hex.x} cy={hex.y} r="21" />
+                  {(army.retreating || army.campaignMission?.intent === 'RETREAT') && <text className="campaign-retreat-mark" x={hex.x - 22} y={hex.y - 14}>↩</text>}
                   <text x={hex.x + 14} y={hex.y + 19}>{army.unitCount ?? '?'}</text>
+                </g>;
+              })}</g>
+              <g className="campaign-ship-markers">{view.ships.map((ship) => {
+                const hex = HEX_BY_ID.get(ship.hexId);
+                return <g key={ship.id} className="campaign-army-marker campaign-ship-marker" role="img" aria-label={t('campaign.seaInvasions.ship')} style={{ '--army-nation-color': CAMPAIGN_NATIONS.seapeople.color }}>
+                  <title>{t('campaign.seaInvasions.ship')}</title>
+                  <circle cx={hex.x} cy={hex.y} r="20" />
+                  <image href={seaPeopleShip} x={hex.x - 24} y={hex.y - 24} width="48" height="48" />
+                  <circle className="campaign-army-outline" cx={hex.x} cy={hex.y} r="22" />
                 </g>;
               })}</g>
             </svg>
           </div>
-          <div className="campaign-map-footer"><span><i />{t('campaign.reachable')}</span><div className="campaign-border-legend">{Object.entries(CAMPAIGN_NATIONS).map(([id, nation]) => <span key={id}><i style={{ background: nation.color }} />{t(`campaign.nations.${id}`)}</span>)}<span><i className="campaign-occupation-key" />{t('campaign.occupation.occupied')}</span></div><small>{t('campaign.mapHelp')}</small></div>
-          <p className="campaign-fog-help">{t('campaign.fogHelp')}</p>
+          <div className="campaign-map-footer"><span><i />{t('campaign.reachable')}</span><div className="campaign-border-legend">{Object.entries(CAMPAIGN_NATIONS).map(([id, nation]) => <span key={id}><i style={{ background: nation.color }} />{t(`campaign.nations.${id}`)}</span>)}<span><i className="campaign-occupation-key" />{t('campaign.occupation.occupied')}</span></div></div>
         </section>
       </div>
-      {report && <section className="campaign-turn-report panel" aria-label={t('campaign.turnReport')}>
-        <h2>{t('campaign.turnReport')}</h2>
-        <p>{t('campaign.productionReport', { grain: formatGrain(report.producedGrain || 0) })}</p>
-        <p>{t('campaign.consumptionReport', { consumed: formatGrain(report.consumedGrain), required: formatGrain(report.requiredGrain) })}</p>
-        {report.situation && <p>{t(`campaign.situations.${report.situation}`)}</p>}
-        {(report.capturedCities || []).filter((entry) => entry.previousOwner === nation && entry.newOwner !== nation).map((entry) => <p className="campaign-city-lost" key={entry.cityId}>{t('campaign.cityActions.lost', { city: t(`campaign.cityNames.${entry.cityId}`), nation: t(`campaign.nations.${entry.newOwner}`) })}</p>)}
-        <ul>{report.armies.filter((entry) => !campaign.armies.some((army) => army.id === entry.armyId && army.designId !== nation)).map((entry) => <li key={entry.armyId}><strong>{entry.name || t('campaign.defaultArmyName', { number: entry.armyId })}</strong><span>{t('campaign.lossReport', { terrain: entry.terrainLosses, supply: entry.supplyLosses })}</span>{entry.assaultLosses > 0 && <span>{t('campaign.cityActions.lossReport', { count: entry.assaultLosses })}</span>}{entry.capturedCityId && <span className="campaign-recovery">{t('campaign.cityActions.captured', { city: t(`campaign.cityNames.${entry.capturedCityId}`) })}</span>}{entry.moraleLosses > 0 && <span>{t('campaign.moraleLossReport', { count: entry.moraleLosses })}</span>}{entry.recoveredMorale > 0 && <span className="campaign-recovery">{t('campaign.moraleRecoveryReport', { count: entry.recoveredMorale })}</span>}{entry.recoveredUnits > 0 && <span className="campaign-recovery">{t('campaign.recoveryReport', { count: entry.recoveredUnits })}</span>}{entry.destroyed && <em>{t('campaign.armyDestroyed')}</em>}</li>)}</ul>
-      </section>}
       <p className="campaign-notice" role="status" aria-live="polite">{notice}</p>
       {merging && mergeSource && mergeTarget && <CampaignMergeDialog source={mergeSource} target={mergeTarget} combined={combinedArmy} onCancel={() => setMerging(null)} onConfirm={confirmMerge} />}
-      {recruiting && capital && <ArmyRecruitment grain={grain} nation={nation} capital={capital} unitTypes={unitTypes} loading={loadingUnitTypes} onClose={() => setRecruiting(false)} onRecruit={recruit} />}
+      {recruiting && capital && <ArmyRecruitment grain={grain} nation={nation} capital={capital} armies={campaign.armies} unitTypes={unitTypes} loading={loadingUnitTypes} onClose={() => setRecruiting(false)} onRecruit={recruit} />}
     </main>
   );
 }

@@ -117,6 +117,7 @@ export function movementContext(campaign, nation) {
         troops: unit.strengths.reduce((sum, strength) => sum + strength, 0), attack: unit.attack, defense: unit.defense, damage: unit.damage })) };
   });
   return { nation, turn: campaign.turn, priority: invaders.length ? 'DEFEND' : occupied.length ? 'RECLAIM' : 'FREE',
+    ...(nation === 'seapeople' ? { objective: campaignCapital(campaign, nation) ? 'EXPAND_AND_RAID' : 'CONQUER_FIRST_CAPITAL' } : {}),
     capitalCityId: campaignCapital(campaign, nation)?.id ?? null,
     reserve: campaign.foreignGrain?.[nation] ?? 0, annualProduction: campaignProduction(campaign, nation),
     occupiedRegions: occupied, reinforcementAdvice, invaders: invaders.map(({ id, hexId, unitCount }) => ({ id, hexId, unitCount })), armies, options };
@@ -142,7 +143,7 @@ export function storeMovementDecision(campaign, nation, decision) {
 
 export function pendingMovementOrder(campaign, nation) {
   const state = progress(campaign, nation);
-  return state.decisions.find((order) => !state.processed.includes(order.armyId));
+  return state.decisions.find((order) => !state.processed.includes(order.armyId) && campaign.armies.find((army) => army.id === order.armyId)?.campaignMission?.intent !== 'RETREAT');
 }
 
 export function skipMovement(campaign, nation) {

@@ -1,17 +1,20 @@
-import { INITIAL_GRAIN, PLAYABLE_NATIONS, SEASONS, availableGrain, armyTroops, armyUpkeep, campaignProduction, deploymentHexes, recruitArmy } from './campaignRules.js';
+import { initialGrain, PLAYABLE_NATIONS, SEASONS, availableGrain, armyTroops, campaignUpkeep, campaignProduction, deploymentHexes, recruitArmy } from './campaignRules.js';
 import { campaignView } from './campaignVisibility.js';
 import { HEX_BY_ID, campaignTerritory, occupiedRegions } from './campaignRules.js';
 import { MIN_ARMY_DIVISIONS, minimumArmyCost } from './armyRules.js';
 import { campaignCapital } from './campaignCityActions.js';
 
 export function automaticRecruitmentDecision(capacity) {
-  const reason = capacity.annualProduction + 1e-9 < capacity.annualConsumption ? 'PRODUCTION_DEFICIT'
+  const reason = capacity.nation === 'seapeople' && !capacity.capitalCityId ? 'NO_CAPITAL'
+    : capacity.annualProduction + 1e-9 < capacity.annualConsumption ? 'PRODUCTION_DEFICIT'
     : capacity.reserve < capacity.minimumArmyCost ? 'INSUFFICIENT_GRAIN' : null;
   return reason ? { action: 'wait', reason, source: 'RULES', blockReason: reason } : null;
 }
 
 export function rivalNations(campaign) {
-  return PLAYABLE_NATIONS.filter((nation) => nation !== (campaign.nation || 'egypt'));
+  const activeSeaPeoples = campaign.seaPeoples?.invasionCount > 0 || campaign.armies.some((army) => army.designId === 'seapeople')
+    || Object.values(campaign.cityOwners || {}).includes('seapeople');
+  return [...PLAYABLE_NATIONS, ...(activeSeaPeoples ? ['seapeople'] : [])].filter((nation) => nation !== (campaign.nation || 'egypt'));
 }
 
 export function needsRecruitmentDecision(campaign, nation) {
@@ -21,7 +24,7 @@ export function needsRecruitmentDecision(campaign, nation) {
 
 export function initializeCampaignAI(campaign) {
   const foreignGrain = { ...campaign.foreignGrain };
-  for (const nation of rivalNations(campaign)) foreignGrain[nation] ??= INITIAL_GRAIN;
+  for (const nation of rivalNations(campaign)) foreignGrain[nation] ??= initialGrain(nation);
   const aiRecruitment = { ...campaign.aiRecruitment };
   for (const nation of rivalNations(campaign)) if (needsRecruitmentDecision(campaign, nation)) delete aiRecruitment[nation];
   return { ...campaign, foreignGrain, aiRecruitment };
@@ -45,9 +48,9 @@ export function maxRecruitableTroops(catalogue, budget) {
 }
 
 export function recruitmentCapacity(campaign, nation, catalogue) {
-  const reserve = availableGrain(campaign.foreignGrain?.[nation] ?? INITIAL_GRAIN);
+  const reserve = availableGrain(campaign.foreignGrain?.[nation] ?? initialGrain(nation));
   const armies = campaign.armies.filter((army) => army.designId === nation);
-  const consumption = Math.round(armies.reduce((sum, army) => sum + armyUpkeep(army), 0) * 100) / 100;
+  const consumption = campaignUpkeep({ ...campaign, nation });
   const production = campaignProduction(campaign, nation);
   const sustainableBudget = Math.max(0, (production / SEASONS.length - consumption) / 0.1);
   const freeHexes = deploymentHexes({ ...campaign, nation });
@@ -92,7 +95,7 @@ export function recruitmentCapacity(campaign, nation, catalogue) {
   };
 }
 
-export function applyRecruitmentDecision(campaign, nation, decision, catalogue) {
+export function applyRecruitmentDecision(campaign, nation, decision, catalogue, { language = 'es' } = {}) {
   if (!rivalNations(campaign).includes(nation) || !needsRecruitmentDecision(campaign, nation)) return campaign;
   if (!decision || !['recruit', 'wait'].includes(decision.action) || typeof decision.reason !== 'string') throw new Error('INVALID_AI_DECISION');
   let next = campaign;
@@ -103,7 +106,7 @@ export function applyRecruitmentDecision(campaign, nation, decision, catalogue) 
       || Object.entries(quantities).some(([code, count]) => !catalogue.some((unit) => unit.code === code) || !Number.isInteger(count) || count < 1 || count > 99)) throw new Error('INVALID_AI_COMPOSITION');
     if (Object.values(quantities).reduce((sum, count) => sum + count, 0) < MIN_ARMY_DIVISIONS) throw new Error('AI_ARMY_TOO_SMALL');
     const recruited = recruitArmy({ ...campaign, nation, grain: campaign.foreignGrain[nation] }, {
-      name: `${nation} ${campaign.nextArmyId}`, designId: nation, quantities,
+      language, designId: nation, quantities,
     }, catalogue);
     if (recruited.armies.length === campaign.armies.length) throw new Error('UNAFFORDABLE_AI_ARMY');
     const purpose = decision.optionId === 'raid' ? 'RAID' : decision.optionId === 'invasion' ? 'CONQUER' : null;

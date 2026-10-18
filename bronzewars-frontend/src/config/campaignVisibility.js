@@ -29,7 +29,9 @@ export function campaignView(campaign, nation = campaign.nation || 'egypt', { re
     if (!own && !inTerritory && !reveal && distance > 2) continue;
     const unitCount = reveal || own || inTerritory || distance <= 1 ? armyUnitCount(army) : null;
     armies.push(own ? { ...army, own, unitCount }
-      : { id: army.id, designId: army.designId, hexId: army.hexId, own, unitCount });
+      : { id: army.id, designId: army.designId, hexId: army.hexId, own, unitCount, ...(army.campaignMission?.intent === 'RETREAT' ? { retreating: true } : {}) });
   }
-  return { nation, visibleHexIds, armies };
+  const ships = (campaign.seaPeoples?.ships || []).filter((ship) => reveal || nation === 'seapeople' || distanceToArmy(ship.hexId) <= 2)
+    .map((ship) => ({ id: ship.id, hexId: ship.hexId, designId: 'seapeople' }));
+  return { nation, visibleHexIds, armies, ships };
 }

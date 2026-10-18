@@ -86,6 +86,7 @@
     "minimumDivisions": "The army must include at least {{count}} divisions."
   },
   "campaign": {
+    "seaInvasions": { "ship": "Sea Peoples invasion ship" },
     "ai": {
       "emblem": "{{nation}} emblem",
       "nationThinking": "{{nation}} is making decisions",
@@ -105,6 +106,8 @@
       "combatPhase": "Resolving the battle between armies…"
     },
     "region": "Region",
+    "retreating": "Retreating",
+    "retreatToCity": "Retreating towards {{city}}",
     "disbandArmy": "Disband army",
     "confirmDisband": "Confirm disbanding",
     "disbandHelp": "All troops in this army will be removed and will stop consuming grain. Recruitment grain is not refunded. This action cannot be undone.",
@@ -157,6 +160,15 @@
     "enemyContact": "Enemy army of {{nation}} · Units: {{count}}",
     "fogHelp": "Vision: all enemy armies in your territory are visible with their unit counts. Outside it: enemies at 2 hexes show ?; adjacent enemies show unit counts. Terrain is clear within 1 hex of your armies.",
     "unitStrength": "{{unit}} · Strength: {{current}}/{{maximum}}",
+    "modifiers": {
+      "label": "Modifiers:",
+      "value": "{{value}}% troops, {{value}}% morale",
+      "terrain": "Terrain attrition",
+      "supply": "Supply shortage",
+      "assault": "Assault",
+      "recovery": "Recovery",
+      "none": "No modifiers"
+    },
     "situations": {
       "famine": "Situation: famine, units suffer 5% casualties per turn.",
       "scarcity": "Situation: scarcity, units neither recover nor suffer supply casualties.",
@@ -278,6 +290,7 @@
       "resultTitle": "Battle result",
       "victor": "Victor: {{nation}}",
       "nationLosses": "{{nation}}: {{count}} casualties",
+      "retreatsToCity": "The army of {{nation}} retreats towards {{city}}.",
       "defeatedRetreats": "The army of {{nation}} retreats.",
       "defeatedDestroyed": "The army of {{nation}} has been destroyed.",
       "continue": "Continue",

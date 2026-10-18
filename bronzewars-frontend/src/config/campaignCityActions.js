@@ -3,7 +3,7 @@ import { activeUnitCount, armyTroops, applyCasualties, wearMorale } from './camp
 
 export const ASSAULT_EFFORT = 3000;
 export const ASSAULT_LOSS_RATE = 0.05;
-const TERRITORIAL_NATIONS = ['egypt', 'hatti', 'nubia'];
+const TERRITORIAL_NATIONS = ['egypt', 'hatti', 'nubia', 'seapeople'];
 const CITY_BY_ID = new Map(CAMPAIGN_CITIES.map((city) => [city.id, city]));
 const CITY_BY_HEX = new Map(CAMPAIGN_CITIES.map((city) => [city.hexId, city]));
 
@@ -18,6 +18,8 @@ export function cityOwner(campaign, city) {
 export function campaignCapital(campaign, nation = campaign.nation || 'egypt') {
   if (!TERRITORIAL_NATIONS.includes(nation)) return null;
   const controlled = CAMPAIGN_CITIES.filter((city) => cityOwner(campaign, city) === nation);
+  const foundingCapital = controlled.find((city) => nation === 'seapeople' && city.id === campaign.seaPeoples?.capitalCityId);
+  if (foundingCapital) return foundingCapital;
   const original = controlled.find((city) => city.nation === nation && city.capital);
   if (original) return original;
   // Use regular output (including occupation), not a temporary raid's zero yield.

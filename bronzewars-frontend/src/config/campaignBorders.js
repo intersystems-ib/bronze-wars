@@ -4,6 +4,7 @@ export const CAMPAIGN_NATIONS = {
   egypt: { color: '#f5d52b' },
   hatti: { color: '#428fff' },
   nubia: { color: '#b55de8' },
+  seapeople: { color: '#43c7bf' },
 };
 
 const SINAI = [[415,339],[500,340],[560,330],[618,310],[650,300],[675,340],[690,385],[650,480],[600,610],[570,640],[540,600],[490,515],[445,445]];

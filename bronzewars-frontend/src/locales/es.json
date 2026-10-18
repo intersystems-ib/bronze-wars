@@ -86,6 +86,7 @@
     "minimumDivisions": "El ejército debe incluir al menos {{count}} divisiones."
   },
   "campaign": {
+    "seaInvasions": { "ship": "Barco de invasión de los Pueblos del Mar" },
     "ai": {
       "emblem": "Emblema de {{nation}}",
       "nationThinking": "{{nation}} está tomando decisiones",
@@ -105,6 +106,8 @@
       "combatPhase": "Resolviendo el combate entre ejércitos…"
     },
     "region": "Región",
+    "retreating": "En retirada",
+    "retreatToCity": "En retirada hacia {{city}}",
     "disbandArmy": "Desbandar ejército",
     "confirmDisband": "Confirmar desbandado",
     "disbandHelp": "Se retirarán todas las tropas de este ejército y dejarán de consumir grano. No se devuelve el grano gastado al reclutarlas. Esta acción no se puede deshacer.",
@@ -157,6 +160,15 @@
     "enemyContact": "Ejército enemigo de {{nation}} · Unidades: {{count}}",
     "fogHelp": "Visión: todos los ejércitos enemigos en territorio propio son visibles con su número de unidades. Fuera de él: enemigos a 2 hexágonos, ?; adyacentes, número de unidades. El terreno se ve con claridad a 1 hexágono de tus ejércitos.",
     "unitStrength": "{{unit}} · Fuerza: {{current}}/{{maximum}}",
+    "modifiers": {
+      "label": "Modificadores:",
+      "value": "{{value}}% de tropas, {{value}}% de moral",
+      "terrain": "Desgaste del terreno",
+      "supply": "Falta de suministros",
+      "assault": "Asalto",
+      "recovery": "Recuperación",
+      "none": "Sin modificadores"
+    },
     "situations": {
       "famine": "Situación: hambruna, las unidades acumulan un 5% de bajas por turno.",
       "scarcity": "Situación: escasez, las unidades no se recuperan ni sufren bajas por suministros.",
@@ -278,6 +290,7 @@
       "resultTitle": "Resultado de la batalla",
       "victor": "Vencedor: {{nation}}",
       "nationLosses": "{{nation}}: {{count}} bajas",
+      "retreatsToCity": "El ejército de {{nation}} se retira hacia {{city}}.",
       "defeatedRetreats": "El ejército de {{nation}} se retira.",
       "defeatedDestroyed": "El ejército de {{nation}} ha sido destruido.",
       "continue": "Continuar",

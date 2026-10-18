@@ -6,7 +6,7 @@ ClassMethod Decide(capacity As %DynamicObject) As %DynamicObject
     set contextId = $system.Util.CreateGUID()
     try {
         if '$isobject(capacity) return ##class(BronzeWars.Service.Result).Error(400, "INVALID_CAPACITY", "Falta la capacidad de reclutamiento.")
-        if (capacity.nation '= "egypt"), (capacity.nation '= "hatti"), (capacity.nation '= "nubia") return ##class(BronzeWars.Service.Result).Error(400, "INVALID_NATION", "Nacion no valida.")
+        if (capacity.nation '= "egypt"), (capacity.nation '= "hatti"), (capacity.nation '= "nubia"), (capacity.nation '= "seapeople") return ##class(BronzeWars.Service.Result).Error(400, "INVALID_NATION", "Nacion no valida.")
         for key = "reserve","annualProduction","consumptionPerTurn","annualConsumption","troops","maxAffordableTroops","maxSustainableTroops","turn","turnsToHarvest" {
             if (capacity.%GetTypeOf(key) '= "number") || (capacity.%Get(key) < 0) return ##class(BronzeWars.Service.Result).Error(400, "INVALID_CAPACITY", "La capacidad debe contener valores numericos positivos.")
         }
@@ -51,6 +51,7 @@ ClassMethod Decide(capacity As %DynamicObject) As %DynamicObject
 
 ClassMethod RecruitmentBlock(capacity As %DynamicObject) As %String
 {
+    if capacity.%Get("nation") = "seapeople", capacity.%Get("capitalCityId") = "" return "NO_CAPITAL"
     if capacity.annualProduction + 0.000000001 < (capacity.consumptionPerTurn * 3) return "PRODUCTION_DEFICIT"
     set cheapest = ""
     for index = 0:1:(capacity.units.%Size()-1) {

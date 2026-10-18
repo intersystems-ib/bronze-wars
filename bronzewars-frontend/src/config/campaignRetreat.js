@@ -1,4 +1,4 @@
-import { CAMPAIGN_CITIES, HEX_BY_ID, PLAYABLE_NATIONS, armyMovement, armyTroops, campaignTerritory, moveArmy, neighbors, remainingMovement } from './campaignRules.js';
+import { CAMPAIGN_CITIES, HEX_BY_ID, CAMPAIGN_FACTIONS, armyMovement, armyTroops, campaignTerritory, moveArmy, neighbors, remainingMovement } from './campaignRules.js';
 import { cityOwner } from './campaignCityActions.js';
 import { hexDistance } from './campaignVisibility.js';
 
@@ -39,7 +39,7 @@ function cityRoute(campaign, army, armies, allowCurrent = true) {
 
 export function markBattleArmiesProcessed(campaign, ids) {
   const aiMovement = { ...campaign.aiMovement };
-  for (const nation of PLAYABLE_NATIONS.filter((nation) => nation !== campaign.nation)) {
+  for (const nation of CAMPAIGN_FACTIONS.filter((nation) => nation !== (campaign.nation || 'egypt'))) {
     const matching = campaign.armies.filter((army) => army.designId === nation && ids.includes(army.id)).map((army) => army.id);
     if (!matching.length) continue;
     const previous = aiMovement[nation]?.turn === campaign.turn ? aiMovement[nation] : { turn: campaign.turn, decisions: [], processed: [] };

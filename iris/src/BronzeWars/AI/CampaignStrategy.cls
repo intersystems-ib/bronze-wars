@@ -6,7 +6,7 @@ ClassMethod Decide(situation As %DynamicObject) As %DynamicObject
     try {
         if '$isobject(situation) return ##class(BronzeWars.Service.Result).Error(400, "INVALID_STRATEGY_CONTEXT", "Falta la situacion de campana.")
         if (situation.%GetTypeOf("armies") '= "array") || (situation.%GetTypeOf("options") '= "array") || (situation.armies.%Size() > 4) || (situation.armies.%Size() < 1) return ##class(BronzeWars.Service.Result).Error(400, "INVALID_STRATEGY_CONTEXT", "Lote de ejercitos no valido.")
-        if (situation.nation '= "egypt"), (situation.nation '= "hatti"), (situation.nation '= "nubia") return ##class(BronzeWars.Service.Result).Error(400, "INVALID_NATION", "Nacion no valida.")
+        if (situation.nation '= "egypt"), (situation.nation '= "hatti"), (situation.nation '= "nubia"), (situation.nation '= "seapeople") return ##class(BronzeWars.Service.Result).Error(400, "INVALID_NATION", "Nacion no valida.")
         set ^BronzeWarsCampaignStrategy(contextId, "situation") = situation.%ToJSON()
         set agent = ##class(BronzeWars.AI.Agent.CampaignStrategy).%New(##class(BronzeWars.AI.Agent.CampaignStrategy).CreateProvider())
         set sc = agent.UseToolSet("BronzeWars.AI.ToolSets.CampaignSituation")

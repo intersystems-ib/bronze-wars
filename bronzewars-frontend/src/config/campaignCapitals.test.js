@@ -32,7 +32,7 @@ test('every nation relocates to its highest-producing controlled city, and the o
 
 test('human recruitment uses the provisional capital region, including a free neighboring hex when its city is occupied', () => {
   for (const nation of ['egypt', 'hatti', 'nubia']) {
-    const lost = loss(newCampaign(nation), nation);
+    const lost = loss({ ...newCampaign(nation), grain: 100 }, nation);
     const first = recruit(lost), second = recruit(first);
     assert.equal(first.armies[0].hexId, campaignCapital(lost).hexId);
     assert.equal(second.armies.length, 2);
