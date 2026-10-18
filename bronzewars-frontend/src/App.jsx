@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { readCampaignSave, writeCampaignSave } from './config/campaignSaves';
+import { applyEncounterResult } from './config/campaignMovement';
 import { api } from './api/client';
 import AppNavigation from './components/AppNavigation';
 import BattleSetup from './components/BattleSetup';
@@ -149,7 +151,8 @@ export default function App() {
   const [deployment, setDeployment] = useState(null);
   const [armyDesignId, setArmyDesignId] = useState(DEFAULT_ARMY_DESIGN_ID);
   const [selectedUnitId, setSelectedUnitId] = useState(null);
-  const [startView, setStartView] = useState('create');
+  const [startView, setStartView] = useState('campaigns');
+  const [resumeCampaignId, setResumeCampaignId] = useState(null);
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [loadingUnitTypes, setLoadingUnitTypes] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -218,6 +221,22 @@ export default function App() {
       await loadBattle(battleId);
       setSelectedUnitId(null);
     });
+  }
+
+  async function openCampaignEncounter(input) {
+    const record = readCampaignSave(localStorage, input.gameId);
+    if (!record || record.campaign.pendingEncounter?.id !== input.encounter.id) throw new Error('INVALID_CAMPAIGN_ENCOUNTER');
+    const payload = input.encounter.battleId ? await api.getBattle(input.encounter.battleId) : await api.campaignBattle(input);
+    const linked = { ...record.campaign, pendingEncounter: { ...record.campaign.pendingEncounter, battleId: payload.battle.id } };
+    writeCampaignSave(localStorage, record, linked);
+    const deploymentPayload = payload.battle.phase === 'DEPLOYMENT' ? await api.getDeployment(payload.battle.id) : null;
+    const humanArmy = payload.battle.armies.find((army) => army.side === 'HUMAN');
+    setResumeCampaignId(input.gameId);
+    setArmyDesignId(getArmyDesignForFaction(humanArmy.faction).id);
+    setSelectedUnitId(null);
+    setDeployment(deploymentPayload);
+    setError(null);
+    setBattle(payload.battle);
   }
 
   function placeUnit(unitId, position) {
@@ -354,6 +373,15 @@ export default function App() {
   }
 
   function leaveBattle() {
+    const gameId = battle?.campaign?.gameId;
+    if (gameId && battle.status === 'FINISHED') {
+      try {
+        const record = readCampaignSave(localStorage, gameId);
+        if (!record) throw new Error(t('campaign.loadFailed'));
+        if (record.campaign.pendingEncounter) writeCampaignSave(localStorage, record, applyEncounterResult(record.campaign, battle, gameId));
+      } catch (caughtError) { showError(caughtError); return; }
+    }
+    setResumeCampaignId(gameId || null);
     setBattle(null);
     setDeployment(null);
     setSelectedUnitId(null);
@@ -362,7 +390,7 @@ export default function App() {
     setDeployingEnemy(false);
     setAnimatingUnitId(null);
     setAutomaticEncounter(null);
-    setStartView('create');
+    setStartView(gameId ? 'campaigns' : 'create');
   }
 
   const errorBanner = error && (
@@ -443,7 +471,7 @@ export default function App() {
           <div className="start-content">
             {errorBanner}
             {startView === 'campaigns' ? (
-              <CampaignPage unitTypes={unitTypes} loadingUnitTypes={loadingUnitTypes} />
+              <CampaignPage unitTypes={unitTypes} loadingUnitTypes={loadingUnitTypes} resumeCampaignId={resumeCampaignId} onEncounter={openCampaignEncounter} />
             ) : startView === 'load' ? (
               <LoadBattlePage busy={busy} onResume={resumeBattle} />
             ) : (

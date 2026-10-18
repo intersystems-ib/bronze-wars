@@ -1,5 +1,12 @@
 import { TERRAIN_TYPES, inPolygon, terrainAt, riverAt, isNileValley } from './campaignTerrain.js';
 import { assignTerritories, adjacentCoordinates, buildBorders } from './campaignBorders.js';
+import { CAMPAIGN_CITIES } from './campaignCities.js';
+import { assignCityRegions } from './campaignRegions.js';
+import { LEGACY_HATTI_ID, normalizeNationId, normalizeCampaignIdentity } from './nationIdentity.js';
+export { CAMPAIGN_CITIES } from './campaignCities.js';
+import { activeUnitCount, armyTroops, applyCasualties, recoverCasualties } from './campaignStrength.js';
+import { cityOwner, cityIncomeNation, settleCityAssault, validCityState } from './campaignCityActions.js';
+export { activeUnitCount, armyTroops, unitTroops, applyCasualties, recoverCasualties, migrateCampaignStrength } from './campaignStrength.js';
 
 export const CAMPAIGN_STORAGE_KEY = 'bronzewars.campaign.egypt.v1';
 export const UPKEEP_RATE = 0.1;
@@ -9,6 +16,15 @@ export const INITIAL_GRAIN = 100;
 export const SEASONS = ['inundation', 'emergence', 'harvest'];
 export const MAP_WIDTH = 1024;
 export const MAP_HEIGHT = 1536;
+export const PLAYABLE_NATIONS = ['egypt', 'hatti', 'nubia'];
+
+export function campaignStorageKey(nation) {
+  return nation === 'egypt' ? CAMPAIGN_STORAGE_KEY : `bronzewars.campaign.${nation}.v1`;
+}
+
+export function availableGrain(grain) {
+  return Math.max(0, Math.ceil(grain - 1e-9));
+}
 const RADIUS = 24;
 const HEX_WIDTH = Math.sqrt(3) * RADIUS;
 
@@ -51,10 +67,21 @@ export const HEX_BY_ID = new Map(CAMPAIGN_HEXES.map((hex) => [hex.id, hex]));
 for (const hex of CAMPAIGN_HEXES) {
   if (hex.land && adjacentCoordinates(hex).some((id) => HEX_BY_ID.get(id)?.land === false)) hex.terrain = 'coast';
   hex.waterAccess = hex.terrain === 'water' || hex.terrain === 'coast' || hex.terrain === 'fertile' || Boolean(hex.river);
-  hex.production = hex.waterAccess ? 1 : 0;
+  hex.production = 0;
 }
 const territories = assignTerritories(CAMPAIGN_HEXES);
 for (const hex of CAMPAIGN_HEXES) hex.territory = territories.get(hex.id);
+for (const city of CAMPAIGN_CITIES) {
+  const hex = HEX_BY_ID.get(city.hexId);
+  hex.city = city;
+  hex.production = city.grain;
+}
+const cityRegions = assignCityRegions(CAMPAIGN_HEXES);
+const regionCities = new Map(CAMPAIGN_CITIES.map((city) => [city.id, city]));
+for (const hex of CAMPAIGN_HEXES) hex.regionId = cityRegions.get(hex.id) ?? null;
+export const CAMPAIGN_REGIONS = CAMPAIGN_CITIES.map((city) => ({
+  id: city.id, city, hexIds: CAMPAIGN_HEXES.filter((hex) => hex.regionId === city.id).map((hex) => hex.id),
+}));
 export const CAMPAIGN_BORDERS = buildBorders(CAMPAIGN_HEXES);
 
 export function neighbors(id) {
@@ -67,8 +94,8 @@ export function neighbors(id) {
 }
 
 export function armyMovement(units) {
-  const count = units.reduce((sum, unit) => sum + unit.quantity, 0);
-  return count ? units.reduce((sum, unit) => sum + unit.quantity * unit.speed, 0) / count : 0;
+  const count = units.reduce((sum, unit) => sum + activeUnitCount(unit), 0);
+  return count ? units.reduce((sum, unit) => sum + activeUnitCount(unit) * unit.speed, 0) / count : 0;
 }
 
 export function remainingMovement(army) {
@@ -78,17 +105,38 @@ export function remainingMovement(army) {
 }
 
 export function armyUpkeep(army) {
-  return Math.round(army.units.reduce((sum, unit) => sum + unit.quantity * unit.grainCost, 0) * UPKEEP_RATE * 100) / 100;
+  return Math.round(army.units.reduce((sum, unit) => sum + activeUnitCount(unit) * unit.grainCost, 0) * UPKEEP_RATE * 100) / 100;
 }
 
 export function campaignUpkeep(campaign) {
-  return Math.round(campaign.armies.reduce((sum, army) => sum + armyUpkeep(army), 0) * 100) / 100;
+  return Math.round(campaign.armies.filter((army) => army.designId === (campaign.nation || 'egypt')).reduce((sum, army) => sum + armyUpkeep(army), 0) * 100) / 100;
 }
 
-export function campaignProduction(campaign) {
-  const nation = campaign.nation || 'egypt';
-  return CAMPAIGN_HEXES.filter((hex) => hex.land && hex.territory === nation)
-    .reduce((sum, hex) => sum + hex.production, 0);
+export function campaignTerritory(campaign, hex) {
+  const city = regionCities.get(hex.regionId) ?? hex.city;
+  return city ? cityOwner(campaign, city) : hex.territory;
+}
+
+export function campaignTerritoryInfo(campaign, hex) {
+  const originalOwner = (regionCities.get(hex.regionId) ?? hex.city)?.nation ?? hex.territory;
+  const controller = campaignTerritory(campaign, hex);
+  return { originalOwner, controller, occupied: Boolean(originalOwner && controller && originalOwner !== controller) };
+}
+
+export function occupiedRegions(campaign, nation) {
+  return CAMPAIGN_REGIONS.filter(({ city }) => city.nation === nation && cityOwner(campaign, city) !== nation)
+    .map(({ id, city, hexIds }) => ({ regionId: id, cityId: city.id, hexId: city.hexId,
+      originalOwner: nation, occupiedBy: cityOwner(campaign, city), capital: city.capital,
+      annualProduction: city.grain, hexCount: hexIds.length }));
+}
+
+export function terrainAttrition(campaign, hex, nation = campaign.nation || 'egypt') {
+  return campaignTerritory(campaign, hex) === nation ? 0 : TERRAIN_TYPES[hex.terrain].attritionRate;
+}
+
+export function campaignProduction(campaign, nation = campaign.nation || 'egypt') {
+  return CAMPAIGN_CITIES.filter((city) => cityIncomeNation(campaign, city) === nation)
+    .reduce((sum, city) => sum + city.grain, 0);
 }
 
 export function campaignEconomy(campaign, production = campaignProduction(campaign)) {
@@ -98,9 +146,9 @@ export function campaignEconomy(campaign, production = campaignProduction(campai
   return { production, consumption, situation };
 }
 
-export function reachableHexes(campaign, armyId) {
+export function reachableHexes(campaign, armyId, nation = campaign.nation || 'egypt') {
   const army = campaign.armies.find((candidate) => candidate.id === armyId);
-  if (!army) return new Map();
+  if (!army || army.designId !== nation) return new Map();
   const budget = Math.floor(armyMovement(army.units) - army.moved + 1e-9);
   const limit = remainingMovement(army);
   const occupied = new Set(campaign.armies.filter((candidate) => candidate.id !== armyId).map((candidate) => candidate.hexId));
@@ -121,113 +169,166 @@ export function reachableHexes(campaign, armyId) {
   ]));
 }
 
-export function findSpawn(campaign) {
+export function deploymentHexes(campaign) {
   const occupied = new Set(campaign.armies.map((army) => army.hexId));
-  // Muster near the Nile delta, expanding to the nearest unoccupied land hex.
-  const queue = ['7,11'];
-  const visited = new Set(queue);
-  for (let i = 0; i < queue.length; i += 1) {
-    const id = queue[i];
-    if (!occupied.has(id) && HEX_BY_ID.get(id)?.land) return id;
-    for (const neighbor of neighbors(id)) {
-      if (visited.has(neighbor.id)) continue;
+  const nation = campaign.nation || 'egypt';
+  if (!PLAYABLE_NATIONS.includes(nation)) return [];
+  const capital = CAMPAIGN_CITIES.find((city) => city.nation === nation && city.capital);
+  const hex = HEX_BY_ID.get(capital?.hexId);
+  if (!hex?.land || cityOwner(campaign, capital) !== nation) return [];
+  const queue = [hex];
+  const visited = new Set([hex.id]);
+  for (let index = 0; index < queue.length; index += 1) {
+    for (const neighbor of neighbors(queue[index].id)) {
+      if (neighbor.regionId !== capital.id || visited.has(neighbor.id)) continue;
       visited.add(neighbor.id);
-      queue.push(neighbor.id);
+      queue.push(neighbor);
     }
   }
-  return null;
+  return queue.filter((candidate) => !occupied.has(candidate.id) && campaignTerritory(campaign, candidate) === nation);
 }
 
-export function newCampaign() {
-  return { version: 1, turn: 0, grain: INITIAL_GRAIN, nextArmyId: 1, armies: [] };
+export function findSpawn(campaign) {
+  return deploymentHexes(campaign)[0]?.id ?? null;
+}
+
+export function newCampaign(nation = 'egypt') {
+  return { version: 2, nation: normalizeNationId(nation), turn: 0, grain: INITIAL_GRAIN, nextArmyId: 1, armies: [] };
+}
+
+export function disbandArmy(campaign, armyId) {
+  if (campaign.pendingEncounter) return campaign;
+  const army = campaign.armies.find((candidate) => candidate.id === armyId);
+  if (!army || army.designId !== (campaign.nation || 'egypt')) return campaign;
+  return { ...campaign, armies: campaign.armies.filter((candidate) => candidate.id !== armyId) };
 }
 
 export function recruitArmy(campaign, { name, designId, quantities }, unitTypes) {
+  if (campaign.pendingEncounter) return campaign;
+  if (!PLAYABLE_NATIONS.includes(designId) || designId !== (campaign.nation || 'egypt')) return campaign;
   const units = unitTypes.filter((unit) => quantities[unit.code] > 0).map((unit) => ({
     code: unit.code, quantity: quantities[unit.code], speed: unit.speed,
     attack: unit.attack, defense: unit.defense, damage: unit.damage, grainCost: unit.grainCost,
+    initialStrength: unit.initialStrength,
+    strengths: Array.from({ length: Math.max(0, Math.min(99, Math.floor(quantities[unit.code]))) }, () => unit.initialStrength),
   }));
-  if (!units.length || units.some((unit) => !Number.isInteger(unit.quantity) || unit.quantity < 1 || unit.quantity > 99 || !Number.isFinite(unit.speed) || unit.speed <= 0 || !Number.isFinite(unit.grainCost) || unit.grainCost <= 0)) return campaign;
+  if (campaign.version !== 2 || !units.length || units.some((unit) => !Number.isInteger(unit.quantity) || unit.quantity < 1 || unit.quantity > 99 || !Number.isInteger(unit.initialStrength) || unit.initialStrength <= 0 || !Number.isFinite(unit.speed) || unit.speed <= 0 || !Number.isFinite(unit.grainCost) || unit.grainCost <= 0)) return campaign;
   const cost = units.reduce((sum, unit) => sum + unit.quantity * unit.grainCost, 0);
   const hexId = findSpawn(campaign);
-  if (cost > campaign.grain || !hexId) return campaign;
+  const budget = availableGrain(campaign.grain);
+  if (cost > budget || !hexId) return campaign;
   return {
-    ...campaign, grain: campaign.grain - cost, nextArmyId: campaign.nextArmyId + 1,
-    armies: [...campaign.armies, { id: campaign.nextArmyId, name: name.trim().slice(0,80), designId, units, initialUnits: units.map((unit) => ({ ...unit })), hexId, moved: 0 }],
+    ...campaign, grain: budget - cost, nextArmyId: campaign.nextArmyId + 1,
+    armies: [...campaign.armies, { id: campaign.nextArmyId, name: name.trim().slice(0,80), designId, units, morale: 100, hexId, moved: 0 }],
   };
 }
 
-export function moveArmy(campaign, armyId, destination) {
-  const cost = reachableHexes(campaign, armyId).get(destination);
+export function moveArmy(campaign, armyId, destination, nation = campaign.nation || 'egypt') {
+  if (campaign.pendingEncounter) return campaign;
+  const cost = reachableHexes(campaign, armyId, nation).get(destination);
   if (!cost) return campaign;
-  return { ...campaign, armies: campaign.armies.map((army) => army.id === armyId ? { ...army, hexId: destination, moved: army.moved + cost } : army) };
+  return { ...campaign, armies: campaign.armies.map((army) => {
+    if (army.id !== armyId) return army;
+    const { cityAction, ...rest } = army;
+    return { ...rest, hexId: destination, moved: army.moved + cost };
+  }) };
 }
 
-// Round losses once per army, then distribute them proportionally across troop types.
-// Rounding each troop type separately would multiply attrition for mixed armies.
-export function applyCasualties(units, rate) {
-  const total = units.reduce((sum, unit) => sum + unit.quantity, 0);
-  const losses = Math.min(total, Math.max(0, Math.ceil(total * rate - 1e-9)));
-  const allocations = units.map((unit, index) => {
-    const share = total ? losses * unit.quantity / total : 0;
-    return { index, lost: Math.floor(share), remainder: share - Math.floor(share) };
-  });
-  let extra = losses - allocations.reduce((sum, entry) => sum + entry.lost, 0);
-  for (const entry of [...allocations].sort((a, b) => b.remainder - a.remainder || a.index - b.index)) {
-    if (extra <= 0) break;
-    if (entry.lost < units[entry.index].quantity) { entry.lost += 1; extra -= 1; }
-  }
-  return { losses, units: units.map((unit, index) => ({ ...unit, quantity: unit.quantity - allocations[index].lost })).filter((unit) => unit.quantity > 0) };
-}
-
-export function recoverCasualties(units, initialUnits) {
-  const current = new Map(units.map((unit) => [unit.code, unit.quantity]));
-  const missing = initialUnits.map((unit) => ({ ...unit, quantity: Math.max(0, unit.quantity - (current.get(unit.code) || 0)) }));
-  const remainingMissing = new Map(applyCasualties(missing, RECOVERY_RATE).units.map((unit) => [unit.code, unit.quantity]));
-  const recovered = missing.reduce((sum, unit) => sum + unit.quantity - (remainingMissing.get(unit.code) || 0), 0);
-  return { recovered, units: initialUnits.map((unit) => ({ ...unit, quantity: unit.quantity - (remainingMissing.get(unit.code) || 0) })).filter((unit) => unit.quantity > 0) };
-}
-
-export function nextSeason(campaign, { production = campaignProduction(campaign) } = {}) {
-  const { consumption: requiredGrain, situation } = campaignEconomy(campaign, production);
-  const producedGrain = production;
-  const consumedGrain = Math.min(campaign.grain + producedGrain, requiredGrain);
+export function nextSeason(campaign, { production } = {}) {
+  if (campaign.version !== 2 || campaign.pendingEncounter) return campaign;
+  const { consumption: requiredGrain, situation } = campaignEconomy(campaign, production ?? campaignProduction(campaign));
+  const startingGrain = availableGrain(campaign.grain);
   const shortage = situation === 'famine';
   const reports = [];
+  const foreignEconomies = new Map(PLAYABLE_NATIONS.filter((nation) => nation !== (campaign.nation || 'egypt') && campaign.aiRecruitment).map((nation) => {
+    const reserve = campaign.foreignGrain?.[nation] ?? INITIAL_GRAIN;
+    const economy = campaignEconomy({ ...campaign, nation, grain: reserve });
+    economy.situation = reserve <= 0 ? 'famine' : economy.production > economy.consumption * 3 ? 'abundance' : 'scarcity';
+    return [nation, economy];
+  }));
+  const cityOwners = { ...campaign.cityOwners };
+  const capturedCities = [];
+  function capture(city, nation) {
+    capturedCities.push({ cityId: city.id, previousOwner: cityOwner({ cityOwners }, city), newOwner: nation });
+    cityOwners[city.id] = nation;
+  }
   const armies = campaign.armies.map((army) => {
-    const terrain = HEX_BY_ID.get(army.hexId).terrain;
-    const initialUnits = army.initialUnits || army.units.map((unit) => ({ ...unit }));
-    const wear = applyCasualties(army.units, TERRAIN_TYPES[terrain].attritionRate);
-    const hunger = applyCasualties(wear.units, shortage ? SUPPLY_ATTRITION_RATE : 0);
-    const recovery = situation === 'abundance' && hunger.units.length > 0
-      ? recoverCasualties(hunger.units, initialUnits) : { recovered: 0, units: hunger.units };
-    reports.push({ armyId: army.id, name: army.name, terrain, terrainLosses: wear.losses, supplyLosses: hunger.losses, recoveredUnits: recovery.recovered, destroyed: recovery.units.length === 0 });
-    return { ...army, initialUnits, units: recovery.units, moved: 0 };
-  }).filter((army) => army.units.length > 0);
+    const own = army.designId === (campaign.nation || 'egypt');
+    const foreignEconomy = foreignEconomies.get(army.designId);
+    if (!own && !foreignEconomy) {
+      const assault = settleCityAssault({ ...campaign, cityOwners }, army);
+      if (assault.capturedCity) capture(assault.capturedCity, army.designId);
+      return assault.army;
+    }
+    const hex = HEX_BY_ID.get(army.hexId);
+    const terrain = hex.terrain;
+    const wear = applyCasualties(army.units, terrainAttrition(campaign, hex, army.designId));
+    const armySituation = own ? situation : foreignEconomy.situation;
+    const hunger = applyCasualties(wear.units, armySituation === 'famine' ? SUPPLY_ATTRITION_RATE : 0);
+    const assault = settleCityAssault({ ...campaign, cityOwners }, { ...army, units: hunger.units });
+    const recovery = armySituation === 'abundance' && army.cityAction?.type !== 'assault' && armyTroops(assault.army) > 0
+      ? recoverCasualties(assault.army.units, RECOVERY_RATE) : { recovered: 0, units: assault.army.units };
+    if (assault.capturedCity) capture(assault.capturedCity, army.designId);
+    if (own) reports.push({ armyId: army.id, name: army.name, terrain, terrainLosses: wear.losses, supplyLosses: hunger.losses, assaultLosses: assault.losses, ...(assault.capturedCity ? { capturedCityId: assault.capturedCity.id } : {}), recoveredUnits: recovery.recovered, destroyed: armyTroops({ units: recovery.units }) === 0 });
+    return { ...assault.army, units: recovery.units, moved: 0 };
+  }).filter((army) => armyTroops(army) > 0);
+  const endingProduction = production ?? campaignProduction({ ...campaign, armies, cityOwners });
+  const producedGrain = campaign.turn % SEASONS.length === SEASONS.indexOf('harvest') ? endingProduction : 0;
+  const consumedGrain = Math.min(startingGrain + producedGrain, requiredGrain);
+  const foreignGrain = { ...campaign.foreignGrain };
+  for (const [nation, economy] of foreignEconomies) {
+    const harvest = campaign.turn % 3 === 2 ? campaignProduction({ ...campaign, cityOwners }, nation) : 0;
+    foreignGrain[nation] = availableGrain(availableGrain(foreignGrain[nation] ?? INITIAL_GRAIN) + harvest - economy.consumption);
+  }
   return {
-    ...campaign, turn: campaign.turn + 1, grain: Math.round((campaign.grain + producedGrain - consumedGrain) * 100) / 100, armies,
-    lastTurnReport: { turn: campaign.turn, requiredGrain, consumedGrain, producedGrain, production, situation, shortage, armies: reports },
+    ...campaign, cityOwners, turn: campaign.turn + 1, grain: availableGrain(startingGrain + producedGrain - consumedGrain), armies,
+    ...(foreignEconomies.size ? { foreignGrain } : {}),
+    lastTurnReport: { turn: campaign.turn, requiredGrain, consumedGrain, producedGrain, production: endingProduction, situation, shortage, capturedCities, armies: reports },
   };
 }
 
-export function loadCampaign(storage) {
+export function loadCampaign(storage, nation = 'egypt', { fallbackToNew = true } = {}) {
+  nation = normalizeNationId(nation);
+  const invalid = () => fallbackToNew ? newCampaign(nation) : null;
   try {
-    const state = JSON.parse(storage.getItem(CAMPAIGN_STORAGE_KEY));
-    if (state?.version !== 1 || !Number.isInteger(state.turn) || state.turn < 0 || !Number.isFinite(state.grain) || state.grain < 0 || !Number.isInteger(state.nextArmyId) || state.nextArmyId < 1 || !Array.isArray(state.armies)) return newCampaign();
+    const saved = storage.getItem(campaignStorageKey(nation));
+    const legacySaved = saved == null && nation === 'hatti' ? storage.getItem(campaignStorageKey(LEGACY_HATTI_ID)) : null;
+    const state = normalizeCampaignIdentity(JSON.parse(saved ?? legacySaved));
+    if (!PLAYABLE_NATIONS.includes(nation) || (state?.nation && state.nation !== nation)) return invalid();
+    if (![1, 2].includes(state?.version) || !Number.isInteger(state.turn) || state.turn < 0 || !Number.isFinite(state.grain) || state.grain < 0 || !Number.isInteger(state.nextArmyId) || state.nextArmyId < 1 || !Array.isArray(state.armies)) return invalid();
     const ids = new Set();
     const positions = new Set();
     for (const army of state.armies) {
-      if (!Number.isInteger(army.id) || army.id < 1 || army.id >= state.nextArmyId || ids.has(army.id) || positions.has(army.hexId) || !HEX_BY_ID.get(army.hexId)?.land || typeof army.name !== 'string' || !['egypt','assyria','nubia','seapeople'].includes(army.designId) || !Number.isInteger(army.moved) || army.moved < 0 || !Array.isArray(army.units) || !army.units.length || army.units.some((unit) => !Number.isInteger(unit.quantity) || unit.quantity < 1 || !Number.isFinite(unit.speed) || unit.speed <= 0 || !Number.isFinite(unit.grainCost) || unit.grainCost <= 0)) return newCampaign();
+      if (!Number.isInteger(army.id) || army.id < 1 || army.id >= state.nextArmyId || ids.has(army.id) || positions.has(army.hexId) || !HEX_BY_ID.get(army.hexId)?.land || typeof army.name !== 'string' || !['egypt','hatti','nubia','seapeople'].includes(army.designId) || !Number.isInteger(army.moved) || army.moved < 0 || !Array.isArray(army.units) || !army.units.length || army.units.some((unit) => !Number.isInteger(unit.quantity) || unit.quantity < 1 || !Number.isFinite(unit.speed) || unit.speed <= 0 || !Number.isFinite(unit.grainCost) || unit.grainCost <= 0)) return invalid();
       ids.add(army.id);
       positions.add(army.hexId);
+      if (state.version === 2 && (armyTroops(army) <= 0 || army.units.some((unit) => !Number.isInteger(unit.initialStrength) || unit.initialStrength <= 0 || !Array.isArray(unit.strengths) || unit.strengths.length !== unit.quantity || unit.strengths.some((strength) => !Number.isInteger(strength) || strength < 0 || strength > unit.initialStrength)))) return invalid();
       if (army.initialUnits) {
-        if (!Array.isArray(army.initialUnits) || !army.initialUnits.length || army.initialUnits.some((unit) => !Number.isInteger(unit.quantity) || unit.quantity < 1 || !Number.isFinite(unit.speed) || unit.speed <= 0 || !Number.isFinite(unit.grainCost) || unit.grainCost <= 0)) return newCampaign();
+        if (!Array.isArray(army.initialUnits) || !army.initialUnits.length || army.initialUnits.some((unit) => !Number.isInteger(unit.quantity) || unit.quantity < 1 || !Number.isFinite(unit.speed) || unit.speed <= 0 || !Number.isFinite(unit.grainCost) || unit.grainCost <= 0)) return invalid();
         const originals = new Map(army.initialUnits.map((unit) => [unit.code, unit.quantity]));
-        if (originals.size !== army.initialUnits.length || army.units.some((unit) => !originals.has(unit.code) || unit.quantity > originals.get(unit.code))) return newCampaign();
+        if (originals.size !== army.initialUnits.length || army.units.some((unit) => !originals.has(unit.code) || unit.quantity > originals.get(unit.code))) return invalid();
       }
     }
-    return state;
+    const intents = ['DEFEND', 'RECLAIM', 'RECOVER', 'RAID', 'CONQUER', 'CONTINUE', 'HOLD'];
+    const validOrder = (order) => order && Number.isInteger(order.armyId) && order.armyId > 0 && typeof order.id === 'string' && intents.includes(order.intent) && HEX_BY_ID.get(order.targetHexId)?.land;
+    if (state.aiMovement !== undefined && (!state.aiMovement || typeof state.aiMovement !== 'object' || Array.isArray(state.aiMovement)
+      || Object.entries(state.aiMovement).some(([id, entry]) => !PLAYABLE_NATIONS.includes(id) || id === nation || !entry || !Number.isInteger(entry.turn) || entry.turn < 0 || entry.turn > state.turn
+        || !Array.isArray(entry.decisions) || !entry.decisions.every(validOrder) || !Array.isArray(entry.processed) || entry.processed.some((id) => !Number.isInteger(id) || id < 1)))) return invalid();
+    if (state.armies.some((army) => army.campaignMission && (!intents.includes(army.campaignMission.intent)
+      || (army.campaignMission.targetCityId && !CAMPAIGN_CITIES.some((city) => city.id === army.campaignMission.targetCityId))))) return invalid();
+    if (state.pendingEncounter) {
+      const entry = state.pendingEncounter;
+      const attacker = state.armies.find((army) => army.id === entry.attackerId);
+      const defender = state.armies.find((army) => army.id === entry.defenderId);
+      if (typeof entry.id !== 'string' || !entry.id || entry.turn !== state.turn || !attacker || !defender || attacker.designId === defender.designId || defender.hexId !== entry.hexId
+        || !neighbors(attacker.hexId).some((hex) => hex.id === defender.hexId) || (entry.battleId !== undefined && !/^[1-9][0-9]*$/.test(String(entry.battleId)))) return invalid();
+    }
+    if (!validCityState(state)) return invalid();
+    if (state.aiRecruitment !== undefined && (!state.aiRecruitment || typeof state.aiRecruitment !== 'object' || Array.isArray(state.aiRecruitment)
+      || Object.entries(state.aiRecruitment).some(([id, entry]) => !PLAYABLE_NATIONS.includes(id) || id === nation || !entry || !Number.isInteger(entry.turn)
+        || entry.turn < 0 || entry.turn > state.turn || !['recruit', 'wait'].includes(entry.action) || typeof entry.reason !== 'string'))) return invalid();
+    return { ...state, nation, grain: availableGrain(state.grain) };
   } catch {
-    return newCampaign();
+    return invalid();
   }
 }

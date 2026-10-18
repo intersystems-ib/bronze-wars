@@ -1,7 +1,7 @@
 export const TERRAIN_TYPES = {
-  water: { attritionRate: 0, difficult: false, maxMovement: 0, production: 1 },
-  coast: { attritionRate: 0, difficult: false, maxMovement: null, production: 1 },
-  fertile: { attritionRate: 0, difficult: false, maxMovement: null, production: 1 },
+  water: { attritionRate: 0, difficult: false, maxMovement: 0, production: 0 },
+  coast: { attritionRate: 0, difficult: false, maxMovement: null, production: 0 },
+  fertile: { attritionRate: 0, difficult: false, maxMovement: null, production: 0 },
   desert: { attritionRate: 0.03, difficult: true, maxMovement: 1, production: 0 },
   mountain: { attritionRate: 0.03, difficult: true, maxMovement: 1, production: 0 },
 };

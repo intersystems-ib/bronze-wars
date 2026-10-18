@@ -67,8 +67,10 @@ ClassMethod BattleUnit(unit As BronzeWars.Model.BattleUnit, hidePosition As %Boo
     set remainingMovement = speed - movementSpent
     if remainingMovement < 0 set remainingMovement = 0
     set unitType = ..UnitType(unit.UnitType, 1, unit.Army.Faction)
+    if unit.CampaignInitialStrength '= "" do unitType.%Set("initialStrength", unit.CampaignInitialStrength)
     set projectiles = $select(unit.CurrentProjectiles="":unit.UnitType.InitialProjectiles, 1:unit.CurrentProjectiles)
     set value = {"id":(unit.%Id()),"name":(unit.Name),"type":(unitType),"currentStrength":(unit.CurrentStrength),"projectiles":(projectiles),"morale":(morale),"movementSpent":(movementSpent),"remainingMovement":(remainingMovement),"isDeployed":(unit.IsDeployed),"hasMoved":(unit.HasMoved),"hasAttacked":(unit.HasAttacked),"active":(unit.Active)}
+    if unit.CampaignSlot '= "" do value.%Set("campaignSlot", unit.CampaignSlot)
     if hidePosition || 'unit.IsDeployed {
         do value.%Set("position", "", "null")
     } else {
@@ -80,6 +82,7 @@ ClassMethod BattleUnit(unit As BronzeWars.Model.BattleUnit, hidePosition As %Boo
 ClassMethod Army(army As BronzeWars.Model.Army, hidePositions As %Boolean = 0) As %DynamicObject
 {
     set value = {"id":(army.%Id()),"side":(army.Side),"faction":(army.Faction),"name":(army.Name),"surrenderPressureTurns":(army.SurrenderPressureTurns),"winner":(army.Winner),"units":(##class(%DynamicArray).%New())}
+    if army.CampaignArmyId '= "" do value.%Set("campaignArmyId", army.CampaignArmyId)
     if army.CommanderType = "" {
         do value.%Set("commanderType", "", "null")
         do value.%Set("commanderName", "", "null")
@@ -104,6 +107,7 @@ ClassMethod Battle(battle As BronzeWars.Model.Battle, hideAIPositions As %Boolea
 {
     set terrain = $select(battle.Terrain="":##class(BronzeWars.Model.Battle).#TERRAINDESERT, 1:battle.Terrain)
     set value = {"id":(battle.%Id()),"name":(battle.Name),"status":(battle.Status),"phase":(battle.Phase),"terrain":(terrain),"currentRound":(battle.CurrentRound),"createdAt":(..Timestamp(battle.CreatedAt)),"board":{"width":(battle.BoardWidth),"height":(battle.BoardHeight)},"armies":(##class(%DynamicArray).%New())}
+    if battle.CampaignGameId '= "" do value.%Set("campaign", {"gameId":(battle.CampaignGameId),"encounterId":(battle.CampaignEncounterId)})
     if battle.StartedAt = "" do value.%Set("startedAt", "", "null")
     if battle.StartedAt '= "" do value.%Set("startedAt", ..Timestamp(battle.StartedAt))
     if battle.FinishedAt = "" do value.%Set("finishedAt", "", "null")
@@ -147,6 +151,7 @@ ClassMethod BattleOutcome(battle As BronzeWars.Model.Battle) As %DynamicObject
             set unit = ##class(BronzeWars.Model.BattleUnit).%OpenId(unitId)
             set initialStrength = unit.UnitType.InitialStrength
             if $isobject(unit.UnitProfile) set initialStrength = unit.UnitProfile.InitialStrength
+            if unit.CampaignInitialStrength '= "" set initialStrength = unit.CampaignInitialStrength
             set initialForces = initialForces + initialStrength
             set casualties = casualties + (initialStrength - unit.CurrentStrength)
             if unit.CurrentStrength > 0 set survivingForces = survivingForces + unit.CurrentStrength

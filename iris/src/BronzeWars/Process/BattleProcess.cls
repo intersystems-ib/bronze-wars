@@ -152,6 +152,14 @@ Method AdvanceTurnWithCommander(request As BronzeWars.Message.Request, Output re
 Method StartWithCommander(request As BronzeWars.Message.Request, Output response As BronzeWars.Message.Response) As %Status [ Private ]
 {
     set payload = request.Payload()
+    set campaignBattle = ##class(BronzeWars.Model.Battle).%OpenId(payload.battleId)
+    if $isobject(campaignBattle), campaignBattle.CampaignGameId '= "" {
+        do payload.%Set("placements", [])
+        do payload.%Set("deploymentSource", "CAMPAIGN")
+        do payload.%Set("deploymentReasoning", "Se conservan las tropas y las bajas de ambos ejercitos de la campana.")
+        set request.PayloadJSON = payload.%ToJSON()
+        return ..SendToOperation(request, .response)
+    }
     set contextRequest = ##class(BronzeWars.Message.Request).%New()
     set contextRequest.Action = "PREPARE_AI_DEPLOYMENT"
     set contextRequest.PayloadJSON = {"battleId":(payload.battleId)}.%ToJSON()

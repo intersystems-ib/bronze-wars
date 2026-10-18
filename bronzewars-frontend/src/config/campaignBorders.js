@@ -2,7 +2,7 @@ import { inPolygon } from './campaignTerrain.js';
 
 export const CAMPAIGN_NATIONS = {
   egypt: { color: '#f5d52b' },
-  assyria: { color: '#428fff' },
+  hatti: { color: '#428fff' },
   nubia: { color: '#b55de8' },
 };
 
@@ -39,7 +39,7 @@ export function assignTerritories(hexes) {
   return new Map(hexes.map((hex) => {
     if (!hex.land || isSinai(hex)) return [hex.id, null];
     if (distance.has(hex.id)) return [hex.id, hex.row <= 33 ? 'egypt' : 'nubia'];
-    if (inPolygon(hex.x, hex.y, LEVANT) || ['euphrates', 'jordan'].includes(hex.river)) return [hex.id, 'assyria'];
+    if (inPolygon(hex.x, hex.y, LEVANT) || ['euphrates', 'jordan'].includes(hex.river)) return [hex.id, 'hatti'];
     return [hex.id, null];
   }));
 }

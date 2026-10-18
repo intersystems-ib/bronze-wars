@@ -7,6 +7,7 @@ XData ProductionDefinition
   <ActorPoolSize>1</ActorPoolSize>
   <Item Name="Unit Type Service" ClassName="BronzeWars.Service.UnitTypeService" PoolSize="0" Enabled="true" Foreground="false" InactivityTimeout="0" />
   <Item Name="Battle Service" ClassName="BronzeWars.Service.BattleService" PoolSize="0" Enabled="true" Foreground="false" InactivityTimeout="0" />
+  <Item Name="Campaign Service" ClassName="BronzeWars.Service.CampaignService" PoolSize="0" Enabled="true" Foreground="false" InactivityTimeout="0" />
   <Item Name="Deployment Service" ClassName="BronzeWars.Service.DeploymentService" PoolSize="0" Enabled="true" Foreground="false" InactivityTimeout="0" />
   <Item Name="Unit Type Process" ClassName="BronzeWars.Process.UnitTypeProcess" PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" />
   <Item Name="Battle Process" ClassName="BronzeWars.Process.BattleProcess" PoolSize="1" Enabled="true" Foreground="false" InactivityTimeout="0" />

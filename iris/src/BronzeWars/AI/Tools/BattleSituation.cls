@@ -24,7 +24,7 @@ ClassMethod GetBattleSituation(battleId As %String) As %DynamicObject
     &sql(
         SELECT
             COALESCE(AVG(CASE WHEN u.Active = 1 THEN u.Morale ELSE NULL END), 0),
-            COALESCE(SUM(COALESCE(p.InitialStrength, t.InitialStrength)), 0),
+            COALESCE(SUM(COALESCE(u.CampaignInitialStrength, p.InitialStrength, t.InitialStrength)), 0),
             COALESCE(SUM(u.CurrentStrength), 0)
         INTO :averageMorale, :initialStrength, :currentStrength
         FROM BronzeWars_Model.BattleUnit u

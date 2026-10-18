@@ -7,6 +7,9 @@ Parameter HandleCorsRequest = 0;
 XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 {
 <Routes>
+    <Route Url="/campaign/recruitment" Method="POST" Call="CampaignRecruitment" />
+    <Route Url="/campaign/battles" Method="POST" Call="CampaignBattle" />
+    <Route Url="/campaign/strategy" Method="POST" Call="CampaignStrategy" />
     <Route Url="/unit-types" Method="GET" Call="GetUnitTypes" />
     <Route Url="/battles" Method="POST" Call="CreateBattle" />
     <Route Url="/battles/:battleId" Method="GET" Call="GetBattle" />
@@ -18,6 +21,38 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
     <Route Url="/battles/:battleId/next-turn" Method="POST" Call="NextTurn" />
     <Route Url="/battles/:battleId/surrender" Method="POST" Call="SurrenderBattle" />
 </Routes>
+}
+
+ClassMethod CampaignRecruitment() As %Status
+{
+    set parsed = ..ReadJSON(0, .input)
+    if 'parsed.ok {
+        do ..WriteResult(parsed)
+        return $$$OK
+    }
+    if input.%GetTypeOf("capacity") '= "object" {
+        do ..WriteResult(..BadField("capacity", "Falta la capacidad de reclutamiento."))
+        return $$$OK
+    }
+    do ..WriteResult(##class(BronzeWars.Interop.Client).Invoke("Campaign Service", "PLAN_CAMPAIGN_RECRUITMENT", input))
+    return $$$OK
+}
+
+ClassMethod CampaignBattle() As %Status
+{
+    set parsed = ..ReadJSON(0, .input)
+    if 'parsed.ok { do ..WriteResult(parsed) return $$$OK }
+    do ..WriteResult(##class(BronzeWars.Service.CampaignBattle).Create(input))
+    return $$$OK
+}
+
+ClassMethod CampaignStrategy() As %Status
+{
+    set parsed = ..ReadJSON(0, .input)
+    if 'parsed.ok { do ..WriteResult(parsed) return $$$OK }
+    if input.%GetTypeOf("situation") '= "object" { do ..WriteResult(..BadField("situation", "Falta la situacion estrategica.")) return $$$OK }
+    do ..WriteResult(##class(BronzeWars.Interop.Client).Invoke("Campaign Service", "PLAN_CAMPAIGN_STRATEGY", input))
+    return $$$OK
 }
 
 ClassMethod GetUnitTypes() As %Status

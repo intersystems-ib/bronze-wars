@@ -22,6 +22,11 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  campaignStrategy: (situation, signal) => request('/campaign/strategy', { method: 'POST', body: JSON.stringify({ situation }), signal }),
+  campaignBattle: (input) => request('/campaign/battles', { method: 'POST', body: JSON.stringify(input) }),
+  campaignRecruitment: (capacity, signal) => request('/campaign/recruitment', {
+    method: 'POST', body: JSON.stringify({ capacity }), signal,
+  }),
   listUnitTypes: () => request('/unit-types'),
   createBattle: (input) => request('/battles', {
     method: 'POST',

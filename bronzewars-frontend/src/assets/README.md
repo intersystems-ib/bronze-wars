@@ -2,8 +2,8 @@
 
 Menu and detail images use the pattern `<unit>_<nation>.jpg`. Transparent
 battlefield images use the same base name under `assets/units` with the `.png`
-extension. The suffix `_egypt` identifies the Egyptian army and `_assyria` identifies
-the Assyrian army. Use a named nation suffix for additional armies. The mapping from domain unit codes to image files lives in
+extension. The suffix `_egypt` identifies the Egyptian army and `_hatti` identifies
+the Hittite army. Use a named nation suffix for additional armies. The mapping from domain unit codes to image files lives in
 `src/config/armyDesigns.js` so that new visual armies can be added without
 changing the board components.
 

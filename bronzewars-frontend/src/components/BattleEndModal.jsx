@@ -64,7 +64,7 @@ export default function BattleEndModal({ battle, onClose }) {
           <ArmyOutcome army={aiArmy} summary={aiSummary} />
         </div>
         <footer className="battle-end-modal__footer">
-          <button className="button button--primary" onClick={onClose} type="button">{t('battleEnd.returnToStart')}</button>
+          <button className="button button--primary" onClick={onClose} type="button">{t(battle.campaign ? 'campaign.combat.return' : 'battleEnd.returnToStart')}</button>
         </footer>
       </section>
     </div>

@@ -1,3 +1,4 @@
+import { normalizeNationId, normalizeFaction } from './nationIdentity';
 import archersEgypt from '../assets/archer_egypt.jpg';
 import chariotsEgypt from '../assets/charioter_egypt.jpg';
 import heavyCavalryEgypt from '../assets/heavy_cavalry_egypt.jpg';
@@ -6,13 +7,13 @@ import lightCavalryEgypt from '../assets/light_cavalry_egypt.jpg';
 import lightInfantryEgypt from '../assets/light_infantry_egypt.jpg';
 import seapeopleSpearmen from '../assets/pikeman_seapeople.jpg';
 import spearmenEgypt from '../assets/pikeman_egypt.jpg';
-import archersAssyria from '../assets/archer_assyria.jpg';
-import chariotsAssyria from '../assets/charioter_assyria.jpg';
-import heavyCavalryAssyria from '../assets/heavy_cavalry_assyria.jpg';
-import heavyInfantryAssyria from '../assets/heavy_infantry_assyria.jpg';
-import lightCavalryAssyria from '../assets/light_cavalry_assyria.jpg';
-import lightInfantryAssyria from '../assets/light_infantry_assyria.jpg';
-import spearmenAssyria from '../assets/pikeman_assyria.jpg';
+import archersHatti from '../assets/archer_hatti.jpg';
+import chariotsHatti from '../assets/charioter_hatti.jpg';
+import heavyCavalryHatti from '../assets/heavy_cavalry_hatti.jpg';
+import heavyInfantryHatti from '../assets/heavy_infantry_hatti.jpg';
+import lightCavalryHatti from '../assets/light_cavalry_hatti.jpg';
+import lightInfantryHatti from '../assets/light_infantry_hatti.jpg';
+import spearmenHatti from '../assets/pikeman_hatti.jpg';
 import battlefieldArchersEgypt from '../assets/units/archer_egypt.png';
 import battlefieldChariotsEgypt from '../assets/units/charioter_egypt.png';
 import battlefieldHeavyCavalryEgypt from '../assets/units/heavy_cavalry_egypt.png';
@@ -21,13 +22,13 @@ import battlefieldLightCavalryEgypt from '../assets/units/light_cavalry_egypt.pn
 import battlefieldLightInfantryEgypt from '../assets/units/light_infantry_egypt.png';
 import battlefieldSeapeopleSpearmen from '../assets/units/pikeman_seapeople.png';
 import battlefieldSpearmenEgypt from '../assets/units/pikeman_egypt.png';
-import battlefieldArchersAssyria from '../assets/units/archer_asyria.png';
-import battlefieldChariotsAssyria from '../assets/units/charioter_asyria.png';
-import battlefieldHeavyCavalryAssyria from '../assets/units/heavy_cavalry_asyria.png';
-import battlefieldHeavyInfantryAssyria from '../assets/units/heavy_infantry_asyria.png';
-import battlefieldLightCavalryAssyria from '../assets/units/light_cavalry_asyria.png';
-import battlefieldLightInfantryAssyria from '../assets/units/light_infantry_asyria.png';
-import battlefieldSpearmenAssyria from '../assets/units/pikeman_asyria.png';
+import battlefieldArchersHatti from '../assets/units/archer_hatti.png';
+import battlefieldChariotsHatti from '../assets/units/charioter_hatti.png';
+import battlefieldHeavyCavalryHatti from '../assets/units/heavy_cavalry_hatti.png';
+import battlefieldHeavyInfantryHatti from '../assets/units/heavy_infantry_hatti.png';
+import battlefieldLightCavalryHatti from '../assets/units/light_cavalry_hatti.png';
+import battlefieldLightInfantryHatti from '../assets/units/light_infantry_hatti.png';
+import battlefieldSpearmenHatti from '../assets/units/pikeman_hatti.png';
 import archersNubia from '../assets/archer_nubia.jpg';
 import lightInfantryNubia from '../assets/light_infantry_nubia.jpg';
 import spearmenNubia from '../assets/pikeman_nubia.jpg';
@@ -41,7 +42,7 @@ import battlefieldArchersSeaPeoples from '../assets/units/archer_seapeople.png';
 import battlefieldLightInfantrySeaPeoples from '../assets/units/light_infantry_seapeople.png';
 import battlefieldHeavyInfantrySeaPeoples from '../assets/units/heavy_infantry_seapeople.png';
 import egyptLogo from '../assets/nations/egypt.png';
-import assyriaLogo from '../assets/nations/assyria.png';
+import hattiLogo from '../assets/nations/hatti.png';
 import nubiaLogo from '../assets/nations/nubia.png';
 import seaPeoplesLogo from '../assets/nations/seapeople.png';
 
@@ -76,30 +77,30 @@ export const ARMY_DESIGNS = [
     },
   },
   {
-    id: 'assyria',
-    faction: 'ASSYRIAN',
-    logo: assyriaLogo,
-    nameKey: 'armies.assyria.name',
-    descriptionKey: 'armies.assyria.description',
+    id: 'hatti',
+    faction: 'HITTITE',
+    logo: hattiLogo,
+    nameKey: 'armies.hatti.name',
+    descriptionKey: 'armies.hatti.description',
     unitArtwork: {
-      ARCHERS: archersAssyria,
-      CHARIOTS: chariotsAssyria,
-      HEAVY_CAVALRY: heavyCavalryAssyria,
-      HEAVY_INFANTRY: heavyInfantryAssyria,
-      LIGHT_CAVALRY: lightCavalryAssyria,
-      LIGHT_INFANTRY: lightInfantryAssyria,
+      ARCHERS: archersHatti,
+      CHARIOTS: chariotsHatti,
+      HEAVY_CAVALRY: heavyCavalryHatti,
+      HEAVY_INFANTRY: heavyInfantryHatti,
+      LIGHT_CAVALRY: lightCavalryHatti,
+      LIGHT_INFANTRY: lightInfantryHatti,
       MERCENARIES: seapeopleSpearmen,
-      SPEARMEN: spearmenAssyria,
+      SPEARMEN: spearmenHatti,
     },
     battlefieldArtwork: {
-      ARCHERS: battlefieldArchersAssyria,
-      CHARIOTS: battlefieldChariotsAssyria,
-      HEAVY_CAVALRY: battlefieldHeavyCavalryAssyria,
-      HEAVY_INFANTRY: battlefieldHeavyInfantryAssyria,
-      LIGHT_CAVALRY: battlefieldLightCavalryAssyria,
-      LIGHT_INFANTRY: battlefieldLightInfantryAssyria,
+      ARCHERS: battlefieldArchersHatti,
+      CHARIOTS: battlefieldChariotsHatti,
+      HEAVY_CAVALRY: battlefieldHeavyCavalryHatti,
+      HEAVY_INFANTRY: battlefieldHeavyInfantryHatti,
+      LIGHT_CAVALRY: battlefieldLightCavalryHatti,
+      LIGHT_INFANTRY: battlefieldLightInfantryHatti,
       MERCENARIES: battlefieldSeapeopleSpearmen,
-      SPEARMEN: battlefieldSpearmenAssyria,
+      SPEARMEN: battlefieldSpearmenHatti,
     },
   },
   {
@@ -143,11 +144,11 @@ export const ARMY_DESIGNS = [
 ];
 
 export function getArmyDesign(designId) {
-  return ARMY_DESIGNS.find((design) => design.id === designId) || ARMY_DESIGNS[0];
+  return ARMY_DESIGNS.find((design) => design.id === normalizeNationId(designId)) || ARMY_DESIGNS[0];
 }
 
 export function getArmyDesignForFaction(faction) {
-  const normalizedFaction = String(faction || '').toUpperCase();
+  const normalizedFaction = normalizeFaction(faction);
   return ARMY_DESIGNS.find((design) => design.faction === normalizedFaction) || ARMY_DESIGNS[0];
 }
 

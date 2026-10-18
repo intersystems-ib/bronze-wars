@@ -12,6 +12,9 @@ Parameter TERRAINDESERT = "DESERT";
 Parameter TERRAINPLAINS = "PLAINS";
 
 Property Name As %String(MAXLEN = 120) [ Required ];
+Property CampaignGameId As %String(MAXLEN = 100);
+Property CampaignEncounterId As %String(MAXLEN = 120);
+Index CampaignEncounterIndex On (CampaignGameId, CampaignEncounterId) [ Unique ];
 Property Status As %String(VALUELIST = ",CREATED,IN_PROGRESS,FINISHED,CANCELLED") [ InitialExpression = "CREATED", Required ];
 Property Phase As %String(VALUELIST = ",DEPLOYMENT,MOVEMENT,COMBAT,FINISHED") [ InitialExpression = "DEPLOYMENT", Required ];
 Property BoardWidth As %Integer(MINVAL = 1) [ InitialExpression = 15, Required ];

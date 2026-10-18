@@ -1,4 +1,37 @@
 .campaign-page { width: min(1600px, calc(100% - 3rem)); margin: 0 auto; padding: 6rem 0 1rem; }
+.campaign-start-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 2rem; }
+.campaign-start-option { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; padding: 1.8rem; border: 1px solid var(--line); background: #211b13; text-align: left; cursor: pointer; }
+.campaign-start-option:hover, .campaign-start-option:focus-visible { border-color: var(--bronze-bright); background: #3b2b19; }
+.campaign-start-option > span { color: var(--bronze-bright); font-size: 2rem; }
+.campaign-start-option strong { color: #efd7ae; font: 1.3rem Georgia, serif; line-height: 1.4; }
+.campaign-start-option small { color: var(--muted); font-size: .8rem; line-height: 1.6; }
+.campaign-game-id { margin: .45rem 0 0; color: var(--muted); font: .65rem ui-monospace, monospace; overflow-wrap: anywhere; }
+.campaign-load-page .start-card { width: min(1100px, 100%); }
+.campaign-save-table-wrap { overflow-x: auto; margin: 1.5rem 0; }
+.campaign-save-table { width: 100%; border-collapse: collapse; text-align: left; }
+.campaign-save-table th, .campaign-save-table td { padding: 1rem .8rem; border-bottom: 1px solid var(--line); }
+.campaign-save-table th { color: var(--muted); font-size: .7rem; font-weight: 500; }
+.campaign-save-table td { font-size: .85rem; color: #efd7ae; }
+.campaign-save-table code { display: block; max-width: 24rem; overflow-wrap: anywhere; font-size: .75rem; }
+.campaign-save-table td small { display: block; margin-top: .4rem; color: var(--muted); }
+.campaign-save-table .button { font-size: .7rem; white-space: nowrap; }
+.campaign-save-nation { display: flex; align-items: center; gap: .65rem; white-space: nowrap; }
+.campaign-save-nation img { width: 2rem; height: 2rem; object-fit: contain; }
+.campaign-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.campaign-nation-start + .button { margin-top: 1rem; }
+.campaign-nation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0 1rem; }
+.campaign-nation-card { display: flex; align-items: center; gap: 1rem; min-width: 0; padding: 1rem; border: 1px solid var(--line); background: #211b13; text-align: left; cursor: pointer; }
+.campaign-nation-card.is-selected { border-color: var(--bronze-bright); background: #3b2b19; box-shadow: inset 0 0 0 1px var(--bronze-bright); }
+.campaign-nation-card > span { display: grid; gap: .5rem; flex: 1; }
+.campaign-nation-card strong { font: 1.05rem Georgia, serif; color: #efd7ae; }
+.campaign-nation-card small { color: var(--muted); font-size: .72rem; line-height: 1.5; }
+.campaign-nation-logo { width: 3.5rem; height: 3.5rem; object-fit: contain; }
+.campaign-nation-card > .unit-artwork { width: 3rem; height: 5rem; object-fit: contain; }
+.campaign-nation-start { width: 100%; }
+.campaign-nation-back { border: 0; padding: 0; margin: 0 0 .6rem; background: transparent; color: var(--bronze-bright); font-size: .72rem; cursor: pointer; }
+.campaign-recruit-nation { display: flex; gap: .75rem; align-items: center; min-height: 3rem; padding: .4rem .75rem; border: 1px solid var(--line); background: #211b13; }
+.campaign-recruit-nation img { width: 2rem; height: 2rem; object-fit: contain; }
+.campaign-recruit-nation strong { font-weight: 500; font-size: .85rem; }
 .campaign-heading { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.2rem; }
 .campaign-heading h1 { font-size: clamp(1.65rem, 3vw, 2.5rem); margin: 0; }
 .campaign-heading .eyebrow { margin-bottom: .4rem; }
@@ -67,11 +100,30 @@
 .campaign-army > span { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
 .campaign-army strong { font-family: Georgia, serif; font-size: .95rem; overflow-wrap: anywhere; }
 .campaign-army small { color: var(--muted); font-size: .65rem; }
-.campaign-army-detail { border-top: 1px solid var(--line); padding-top: 1rem; }
-.campaign-army-detail p { font-size: .73rem; color: #d9c19a; margin: .5rem 0; }
-.campaign-army-detail ul { list-style: none; margin: .7rem 0; padding: 0; display: grid; gap: .45rem; }
-.campaign-army-detail li { display: flex; gap: .5rem; justify-content: space-between; font-size: .72rem; color: var(--muted); }
-.campaign-army-detail small { display: block; font-size: .66rem; line-height: 1.6; color: var(--muted); }
+.campaign-reveal { display: flex; align-items: center; gap: .6rem; margin: .75rem 0; font-size: .8rem; color: var(--muted); }
+.campaign-reveal input { accent-color: var(--bronze-bright); }
+.campaign-ai-modal { width: min(430px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; margin: auto; padding: 2rem; text-align: center; color: var(--text); box-shadow: 0 20px 90px #0009; }
+.campaign-ai-modal::backdrop { background: #090704d9; }
+.campaign-ai-emblem { display: block; width: 100px; height: 100px; margin: 0 auto 1.25rem; object-fit: contain; }
+.campaign-ai-modal h2 { margin: 0 0 .75rem; color: #efd39d; font: 1.55rem Georgia, serif; }
+.campaign-ai-modal p { color: var(--muted); font-size: .85rem; line-height: 1.6; }
+.campaign-ai-modal small { color: var(--muted); font-size: .75rem; }
+.campaign-ai-modal progress { display: block; width: 100%; margin-top: 1.25rem; accent-color: var(--bronze-bright); }
+.campaign-disband { margin: .75rem 0; }
+.campaign-disband p { color: var(--muted); font-size: .73rem; line-height: 1.6; }
+.campaign-disband .button { font-size: .68rem; padding: .75rem .5rem; }
+.campaign-army-composition { display: grid; grid-template-columns: repeat(auto-fit, minmax(45px, 1fr)); gap: .5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.campaign-unit-group { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .5rem; min-width: 0; margin: 0; padding: .6rem .25rem .45rem; border: 1px solid var(--line); background: #211b13; }
+.campaign-unit-group > img { width: 100%; height: 4rem; object-fit: contain; }
+.campaign-unit-group figcaption { width: 100%; padding-top: .4rem; border-top: 1px solid var(--line); color: #efd39d; text-align: center; font-size: .85rem; font-weight: 600; }
+.campaign-city-actions { border-top: 1px solid var(--line); margin: 1rem 0; padding-top: 1rem; }
+.campaign-city-actions h3 { color: #efd39d; margin: 0 0 .6rem; font: 1.1rem Georgia, serif; }
+.campaign-city-actions p { font-size: .73rem; color: var(--muted); line-height: 1.6; }
+.campaign-city-action-buttons { display: flex; gap: .5rem; }
+.campaign-city-actions .button { font-size: .68rem; padding: .75rem .5rem; flex: 1; }
+.campaign-city-actions progress { width: 100%; accent-color: var(--bronze-bright); }
+.campaign-city-lost { color: #efab86; }
+.campaign-hex .campaign-city-owner { stroke: #f4ddb4; stroke-width: 1; }
 .campaign-save-note { margin: 1.2rem 0 0; border-top: 1px solid var(--line); padding-top: .8rem; font-size: .65rem; line-height: 1.5; color: var(--muted); }
 .campaign-map-panel { overflow: hidden; min-width: 0; }
 .campaign-map-toolbar { display: flex; justify-content: space-between; align-items: center; padding: .7rem .9rem; gap: .75rem; border-bottom: 1px solid var(--line); }
@@ -91,6 +143,18 @@
 .campaign-hex.is-selected polygon { stroke: #fff3ce; stroke-opacity: 1; stroke-width: 3; fill: #dd9f35; fill-opacity: .4; }
 .campaign-hex.is-occupied:focus-visible polygon { stroke: white; stroke-opacity: 1; stroke-width: 3; }
 .campaign-hex image, .campaign-hex text { pointer-events: none; }
+.campaign-fog, .campaign-army-markers { pointer-events: none; }
+.campaign-fog rect { fill: #090e18; fill-opacity: .7; }
+.campaign-army-marker circle { fill: #302516; fill-opacity: .9; stroke: #1a130b; stroke-width: 2; }
+.campaign-army-marker .campaign-army-outline { fill: none; stroke: var(--army-nation-color); stroke-width: 3; }
+.campaign-army-marker text { fill: white; stroke: #281d0e; stroke-width: 3; paint-order: stroke; font: bold 13px system-ui; }
+.campaign-fog-help { padding: 0 .9rem .8rem; margin: 0; color: var(--muted); font-size: .68rem; line-height: 1.5; }
+.campaign-enemy-contact { color: #efab86 !important; }
+.campaign-city { pointer-events: none; }
+.campaign-hex .campaign-city .campaign-capital-ring { fill: #302516; fill-opacity: .55; stroke-width: 2; }
+.campaign-city-preview { display: block; width: 110px; height: 100px; object-fit: contain; margin: .5rem auto; }
+.campaign-city-labels { pointer-events: none; }
+.campaign-city-name { fill: #ffe3a3; stroke: #281d0e; stroke-width: 3; paint-order: stroke; font: bold 12px system-ui; }
 .campaign-hex text { fill: white; stroke: #281d0e; stroke-width: 3; paint-order: stroke; font: bold 13px system-ui; }
 .campaign-hex .campaign-move-dot { fill: #fff5ca; stroke: #614b25; stroke-width: .7; pointer-events: none; }
 .campaign-map-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem .9rem; color: var(--muted); font-size: .65rem; }
@@ -113,6 +177,11 @@
   .campaign-sidebar { max-height: calc(100vh - 18rem); }
 }
 @media (max-width: 680px) {
+  .campaign-start-options { grid-template-columns: 1fr; }
+  .campaign-start-option { padding: 1.2rem; }
+  .campaign-save-table th, .campaign-save-table td { padding: .8rem .4rem; }
+  .campaign-save-table code { min-width: 8rem; }
+  .campaign-nation-grid { grid-template-columns: 1fr; }
   .campaign-page { width: calc(100% - 1rem); padding-top: 5rem; }
   .campaign-heading { gap: 1rem; }
   .campaign-heading > .button { width: 100%; }
@@ -124,3 +193,10 @@
   .campaign-map-footer { align-items: start; flex-direction: column; gap: .5rem; }
   .campaign-recruit-fields { grid-template-columns: 1fr; }
 }
+
+.campaign-save-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.campaign-delete-dialog { width: min(32rem, calc(100vw - 2rem)); margin: auto; padding: 2rem; color: var(--text); }
+.campaign-delete-dialog::backdrop { background: rgb(0 0 0 / 75%); }
+.campaign-delete-dialog p { color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
+
+.campaign-border-legend i.campaign-occupation-key { background: repeating-linear-gradient(125deg, transparent 0 3px, #e8c178 3px 5px); border: 1px solid #e8c178; }

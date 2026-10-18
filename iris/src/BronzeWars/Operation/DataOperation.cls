@@ -67,7 +67,7 @@ Method ListUnitTypes() As %DynamicObject [ Private ]
 Method CreateBattle(input As %DynamicObject) As %DynamicObject [ Private ]
 {
     set width = input.boardWidth, height = input.boardHeight, name = input.name, humanFaction = input.faction
-    set aiFaction = $select(humanFaction="EGYPTIAN":"ASSYRIAN", 1:"EGYPTIAN")
+    set aiFaction = $select(humanFaction="EGYPTIAN":"HITTITE", 1:"EGYPTIAN")
 
     tstart
     set result = ""

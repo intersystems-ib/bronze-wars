@@ -5,6 +5,8 @@ Relationship Army As BronzeWars.Model.Army [ Cardinality = one, Inverse = Units,
 Relationship UnitType As BronzeWars.Model.UnitType [ Cardinality = one, Inverse = BattleUnits, Required ];
 Relationship UnitProfile As BronzeWars.Model.UnitProfile [ Cardinality = one, Inverse = BattleUnits ];
 Property Name As %String(MAXLEN = 100);
+Property CampaignSlot As %String(MAXLEN = 60);
+Property CampaignInitialStrength As %Integer(MINVAL = 1);
 Property CurrentStrength As %Integer(MINVAL = 0) [ Required ];
 Property CurrentProjectiles As %Integer(MINVAL = 0) [ InitialExpression = 0, Required ];
 Property Morale As %Integer(MAXVAL = 100, MINVAL = 0) [ InitialExpression = 100, Required ];

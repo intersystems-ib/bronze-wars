@@ -33,6 +33,7 @@ ClassMethod Build(battleId As %String, Output context As %DynamicObject) As %Sta
             if remaining < 0 set remaining = 0
             set initialStrength = unit.UnitType.InitialStrength
             if $isobject(unit.UnitProfile) set initialStrength = unit.UnitProfile.InitialStrength
+            if unit.CampaignInitialStrength '= "" set initialStrength = unit.CampaignInitialStrength
             set value = {"unitId":(unitId),"code":(unit.UnitType.Code),"x":(unit.PositionX),"y":(unit.PositionY),"remainingMovement":(remaining),"attackRange":(attackRange),"projectiles":(unit.CurrentProjectiles),"morale":(unit.Morale),"currentStrength":(unit.CurrentStrength),"initialStrength":(initialStrength)}
             if side = "HUMAN" do context.humanUnits.%Push(value)
             if side = "AI" do context.aiUnits.%Push(value)

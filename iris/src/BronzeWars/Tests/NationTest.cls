@@ -47,6 +47,24 @@ Method Test02CreateNationalArmies()
     do $$$AssertNotTrue(invalid.ok, "Nubia cannot select Sea Peoples heavy infantry")
 }
 
+Method Test04HittiteIdentity()
+{
+    set sc = ##class(BronzeWars.Data.Seed).Run()
+    do $$$AssertStatusOK(sc, "The Hittite catalogue is ready")
+    set result = ##class(BronzeWars.Interop.Client).CreateBattle({"name":"Hittite identity test","faction":"HITTITE","units":[{"code":"LIGHT_INFANTRY","quantity":1}]})
+    do $$$AssertTrue(result.ok, "A Hittite army can create a battle")
+    if 'result.ok quit
+    set human = result.data.battle.armies.%Get(0)
+    set enemy = result.data.battle.armies.%Get(1)
+    do $$$AssertEquals(human.faction, "HITTITE", "The API returns the Hittite identity")
+    do $$$AssertEquals(enemy.faction, "EGYPTIAN", "Hittite armies face Egyptians")
+    set unit = human.units.%Get(0)
+    do $$$AssertEquals(unit.type.grainCost, 4, "The national cost is retained")
+    do $$$AssertEquals(unit.type.attack, 3, "The national attack is retained")
+    set stored = ##class(BronzeWars.Model.BattleUnit).%OpenId(unit.id)
+    do $$$AssertEquals(stored.UnitProfile.Faction, "HITTITE", "The stored profile is Hittite")
+}
+
 Method Test03SpearmenKeepMatchupAdvantages()
 {
     set spearmen = ##class(BronzeWars.Model.UnitType).CodeIndexOpen("SPEARMEN")

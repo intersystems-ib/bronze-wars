@@ -94,6 +94,7 @@ ClassMethod ArmyUnits(army As BronzeWars.Model.Army) As %DynamicArray [ Private 
         if '$isobject(unit) continue
         set initialStrength = unit.UnitType.InitialStrength
         if $isobject(unit.UnitProfile) set initialStrength = unit.UnitProfile.InitialStrength
+        if unit.CampaignInitialStrength '= "" set initialStrength = unit.CampaignInitialStrength
         do units.%Push({"morale":(unit.Morale),"soldiers":(unit.CurrentStrength),"initialStrength":(initialStrength),"active":(unit.Active)})
     }
     &sql(CLOSE SurrenderUnitCursor)

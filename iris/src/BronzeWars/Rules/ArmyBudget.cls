@@ -6,7 +6,7 @@ Parameter AIMaxUnits = 14;
 
 ClassMethod IsSupportedFaction(faction As %String) As %Boolean
 {
-    return $listfind($listbuild("EGYPTIAN", "ASSYRIAN", "NUBIAN", "SEA_PEOPLES"), $zconvert(faction, "U")) > 0
+    return $listfind($listbuild("EGYPTIAN", "HITTITE", "NUBIAN", "SEA_PEOPLES"), $zconvert(faction, "U")) > 0
 }
 
 ClassMethod GrainCost(code As %String, faction As %String = "") As %Integer
@@ -16,7 +16,7 @@ ClassMethod GrainCost(code As %String, faction As %String = "") As %Integer
     if faction = "SEA_PEOPLES", '$listfind($listbuild("ARCHERS", "LIGHT_INFANTRY", "HEAVY_INFANTRY", "SPEARMEN"), code) return 0
     if code = "LIGHT_INFANTRY" {
         if faction = "EGYPTIAN" return 6
-        if faction = "ASSYRIAN" return 4
+        if faction = "HITTITE" return 4
         return 5
     }
     if code = "SPEARMEN" return 6
@@ -24,13 +24,13 @@ ClassMethod GrainCost(code As %String, faction As %String = "") As %Integer
     if code = "MERCENARIES" return ((..GrainCost("LIGHT_INFANTRY", faction) + ..GrainCost("HEAVY_INFANTRY", faction)) \ 2) + 1
     if code = "HEAVY_INFANTRY" {
         if faction = "EGYPTIAN" return 8
-        if faction = "ASSYRIAN" return 10
+        if faction = "HITTITE" return 10
         return 9
     }
     if code = "LIGHT_CAVALRY" return 20
     if code = "HEAVY_CAVALRY" {
         if faction = "EGYPTIAN" return 23
-        if faction = "ASSYRIAN" return 26
+        if faction = "HITTITE" return 26
         return 25
     }
     if code = "CHARIOTS" {

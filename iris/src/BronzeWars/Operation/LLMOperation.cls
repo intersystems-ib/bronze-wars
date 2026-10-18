@@ -6,6 +6,18 @@ Parameter INVOCATION = "Queue";
 
 Method Handle(pRequest As BronzeWars.Message.Request, Output pResponse As BronzeWars.Message.Response) As %Status
 {
+    if pRequest.Action = "PLAN_CAMPAIGN_STRATEGY" {
+        set body = pRequest.Payload()
+        set result = ##class(BronzeWars.AI.CampaignStrategy).Decide(body.situation)
+        set pResponse = ##class(BronzeWars.Message.Response).FromResult(result)
+        return $$$OK
+    }
+    if pRequest.Action = "PLAN_CAMPAIGN_RECRUITMENT" {
+        set body = pRequest.Payload()
+        set result = ##class(BronzeWars.AI.CampaignRecruitment).Decide(body.capacity)
+        set pResponse = ##class(BronzeWars.Message.Response).FromResult(result)
+        return $$$OK
+    }
     if (pRequest.Action '= "PLAN_AI_ARMY") && (pRequest.Action '= "PLAN_AI_DEPLOYMENT") && (pRequest.Action '= "PLAN_AI_MOVEMENT") {
         set pResponse = ##class(BronzeWars.Message.Response).FromResult(##class(BronzeWars.Service.Result).Error(500, "UNSUPPORTED_ACTION", "La operacion de IA no admite esta accion."))
         return $$$OK

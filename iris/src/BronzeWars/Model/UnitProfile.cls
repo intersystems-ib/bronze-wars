@@ -1,7 +1,7 @@
 Class BronzeWars.Model.UnitProfile Extends (%Persistent, %JSON.Adaptor)
 {
 Relationship UnitType As BronzeWars.Model.UnitType [ Cardinality = one, Inverse = Profiles, Required ];
-Property Faction As %String(VALUELIST = ",EGYPTIAN,ASSYRIAN,NUBIAN,SEA_PEOPLES") [ Required ];
+Property Faction As %String(VALUELIST = ",EGYPTIAN,HITTITE,NUBIAN,SEA_PEOPLES") [ Required ];
 Property InitialStrength As %Integer(MINVAL = 1) [ Required ];
 Property Speed As %Integer(MINVAL = 1) [ Required ];
 Property Attack As %Integer(MAXVAL = 10, MINVAL = 1) [ Required ];

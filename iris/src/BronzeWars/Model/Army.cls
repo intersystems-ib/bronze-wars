@@ -5,8 +5,9 @@ Parameter SIDEAI = "AI";
 
 Relationship Battle As BronzeWars.Model.Battle [ Cardinality = one, Inverse = Armies, Required ];
 Property Name As %String(MAXLEN = 100) [ Required ];
+Property CampaignArmyId As %Integer;
 Property Side As %String(VALUELIST = ",HUMAN,AI") [ Required ];
-Property Faction As %String(VALUELIST = ",EGYPTIAN,ASSYRIAN,NUBIAN,SEA_PEOPLES") [ Required ];
+Property Faction As %String(VALUELIST = ",EGYPTIAN,HITTITE,NUBIAN,SEA_PEOPLES") [ Required ];
 Property CommanderType As %String(VALUELIST = ",DEFENSIVE,AGGRESSIVE,SKIRMISHER,FLANKER,BALANCED");
 Property SurrenderPressureTurns As %Integer(MINVAL = 0) [ InitialExpression = 0, Required ];
 Property SurrenderPressureRound As %Integer(MINVAL = 0);

@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CAMPAIGN_HEXES, CAMPAIGN_BORDERS, CAMPAIGN_STORAGE_KEY, HEX_BY_ID, armyMovement, armyUpkeep, campaignUpkeep, campaignProduction, campaignEconomy, recoverCasualties, applyCasualties, remainingMovement, findSpawn, loadCampaign, moveArmy, neighbors, newCampaign, nextSeason, reachableHexes, recruitArmy } from './campaignRules.js';
+import { CAMPAIGN_HEXES, CAMPAIGN_BORDERS, CAMPAIGN_STORAGE_KEY, HEX_BY_ID, armyMovement, armyTroops, activeUnitCount, unitTroops, migrateCampaignStrength, armyUpkeep, campaignUpkeep, campaignProduction, campaignEconomy, recoverCasualties, applyCasualties, remainingMovement, findSpawn, loadCampaign, moveArmy, neighbors, newCampaign, nextSeason, reachableHexes, recruitArmy } from './campaignRules.js';
 import { TERRAIN_TYPES, RIVERS, terrainAt } from './campaignTerrain.js';
 import { CAMPAIGN_NATIONS, isSinai } from './campaignBorders.js';
+import { CAMPAIGN_CITIES } from './campaignCities.js';
+import { disbandArmy, terrainAttrition } from './campaignRules.js';
+import { startCityAction } from './campaignCityActions.js';
 
 const catalogue = [
-  { code: 'LIGHT_INFANTRY', speed: 2, grainCost: 5, attack: 4, defense: 2, damage: 5 },
-  { code: 'SPEARMEN', speed: 1, grainCost: 6, attack: 5, defense: 6, damage: 7 },
-  { code: 'CHARIOTS', speed: 4, grainCost: 12, attack: 5, defense: 4, damage: 5 },
+  { code: 'LIGHT_INFANTRY', initialStrength: 60, speed: 2, grainCost: 5, attack: 4, defense: 2, damage: 5 },
+  { code: 'SPEARMEN', initialStrength: 100, speed: 1, grainCost: 6, attack: 5, defense: 6, damage: 7 },
+  { code: 'CHARIOTS', initialStrength: 15, speed: 4, grainCost: 12, attack: 5, defense: 4, damage: 5 },
 ];
 function settle(state, options = {}) {
   return nextSeason(state, { production: 0, ...options });
@@ -15,6 +18,44 @@ function settle(state, options = {}) {
 function recruit(state, quantities, designId = 'egypt') {
   return recruitArmy(state, { name: 'Nile army', designId, quantities }, catalogue);
 }
+
+test('disbanding removes only the selected friendly army, frees its capital and stops its upkeep without a refund', () => {
+  const state = recruit(newCampaign(), { LIGHT_INFANTRY: 2 });
+  const capital = state.armies[0].hexId;
+  const other = { ...state.armies[0], id: 2, hexId: neighbors(capital)[0].id };
+  const enemy = { ...other, id: 3, designId: 'hatti', hexId: '17,0' };
+  state.armies.push(other, enemy);
+  state.nextArmyId = 4;
+  const next = disbandArmy(state, 1);
+  assert.deepEqual(next.armies, [other, enemy]);
+  assert.equal(state.armies.length, 3);
+  assert.equal(next.grain, state.grain);
+  assert.equal(next.turn, state.turn);
+  assert.equal(next.nextArmyId, 4);
+  assert.equal(campaignUpkeep(state), 2);
+  assert.equal(campaignUpkeep(next), 1);
+  assert.equal(findSpawn(next), capital);
+  assert.equal(settle(next).grain, state.grain - 1);
+  assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(next) }), next);
+  assert.equal(disbandArmy(next, 3), next);
+  assert.equal(disbandArmy(next, 999), next);
+});
+
+test('disbanding the last army abandons its assault without capturing the city or changing raid history', () => {
+  let state = recruit(newCampaign(), { SPEARMEN: 5 });
+  const city = CAMPAIGN_CITIES.find((candidate) => candidate.nation === 'hatti');
+  state.armies[0].hexId = city.hexId;
+  state = startCityAction(state, 1, 'raid');
+  state = startCityAction(state, 1, 'assault');
+  assert.ok(state.armies[0].cityAction);
+  const next = disbandArmy(state, 1);
+  assert.deepEqual(next.armies, []);
+  assert.equal(campaignUpkeep(next), 0);
+  assert.equal(next.cityRaids, state.cityRaids);
+  assert.equal(next.cityOwners, state.cityOwners);
+  assert.equal(settle(next).grain, state.grain);
+  assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(next) }), next);
+});
 
 test('recruitment spends the shared 100-grain reserve and preserves composition and stats', () => {
   const state = newCampaign();
@@ -35,14 +76,56 @@ test('empty, fractional, negative and unaffordable armies are rejected', () => {
   }
 });
 
-test('several armies share the reserve and never occupy the same hex', () => {
-  let state = newCampaign();
-  for (let i = 0; i < 20; i += 1) state = recruit(state, { LIGHT_INFANTRY: 1 }, 'nubia');
-  assert.equal(state.grain, 0);
-  assert.equal(state.armies.length, 20);
-  assert.equal(new Set(state.armies.map((army) => army.hexId)).size, 20);
+test('recruitment uses free capital-region hexes and subsequent armies share reserves without stacking', () => {
+  let state = newCampaign('nubia');
+  const capital = findSpawn(state);
+  state = recruit(state, { LIGHT_INFANTRY: 1 }, 'nubia');
+  assert.equal(state.armies[0].hexId, capital);
+  const nearby = findSpawn(state);
+  assert.notEqual(nearby, capital);
+  assert.equal(HEX_BY_ID.get(nearby).regionId, HEX_BY_ID.get(capital).regionId);
+  const expanded = recruit(state, { LIGHT_INFANTRY: 1 }, 'nubia');
+  assert.equal(expanded.armies[1].hexId, nearby);
+  assert.equal(expanded.grain, 90);
+  state = moveArmy(state, 1, reachableHexes(state, 1).keys().next().value);
+  assert.equal(findSpawn(state), capital);
+  state = recruit(state, { LIGHT_INFANTRY: 1 }, 'nubia');
+  assert.equal(state.grain, 90);
+  assert.equal(state.armies.length, 2);
+  assert.equal(state.armies[1].hexId, capital);
+  assert.equal(new Set(state.armies.map((army) => army.hexId)).size, 2);
   assert.ok(state.armies.every((army) => army.designId === 'nubia'));
+  assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(state) }, 'nubia'), state);
   assert.equal(recruit(state, { LIGHT_INFANTRY: 1 }), state);
+});
+
+test('all nations can fill their capital region, but never stack, use other regions, or deploy after losing the capital', () => {
+  for (const nation of ['egypt', 'hatti', 'nubia']) {
+    const state = { ...newCampaign(nation), grain: 10000 };
+    const capital = CAMPAIGN_CITIES.find((city) => city.nation === nation && city.capital);
+    assert.equal(findSpawn(state), capital.hexId);
+    const occupied = recruit(state, { LIGHT_INFANTRY: 1 }, nation);
+    occupied.armies[0].designId = nation === 'egypt' ? 'hatti' : 'egypt';
+    const reinforced = recruit(occupied, { LIGHT_INFANTRY: 1 }, nation);
+    assert.equal(reinforced.armies.length, 2);
+    assert.notEqual(reinforced.armies[1].hexId, capital.hexId);
+    let filled = state;
+    const region = CAMPAIGN_HEXES.filter((hex) => hex.regionId === capital.id);
+    for (let index = 0; index < region.length; index += 1) {
+      const next = recruit(filled, { LIGHT_INFANTRY: 1 }, nation);
+      assert.equal(next.armies.length, index + 1);
+      assert.equal(HEX_BY_ID.get(next.armies.at(-1).hexId).regionId, capital.id);
+      assert.ok(HEX_BY_ID.get(next.armies.at(-1).hexId).land);
+      filled = next;
+    }
+    assert.equal(new Set(filled.armies.map((army) => army.hexId)).size, region.length);
+    assert.equal(findSpawn(filled), null);
+    assert.equal(recruit(filled, { LIGHT_INFANTRY: 1 }, nation), filled);
+    assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(filled) }, nation), filled);
+    const lost = { ...state, cityOwners: { [capital.id]: nation === 'egypt' ? 'hatti' : 'egypt' } };
+    assert.equal(findSpawn(lost), null);
+    assert.equal(recruit(lost, { LIGHT_INFANTRY: 1 }, nation), lost);
+  }
 });
 
 test('movement is weighted by each troop quantity and only whole hexes can be traversed', () => {
@@ -61,6 +144,8 @@ test('movement is weighted by each troop quantity and only whole hexes can be tr
 
 test('movement tracks the distance of multi-hex paths and rejects occupied, sea and distant hexes', () => {
   let state = recruit(newCampaign(), { CHARIOTS: 1 });
+  state = moveArmy(state, 1, neighbors(state.armies[0].hexId).find((hex) => hex.terrain === 'fertile').id);
+  state = settle(state);
   state = recruit(state, { LIGHT_INFANTRY: 1 });
   const army = state.armies[0];
   const reachable = reachableHexes(state, army.id);
@@ -100,7 +185,7 @@ test('seasons restore movement and advance to 1299 BC after the third turn while
   state = settle(settle(state));
   assert.equal(state.turn % 3, 0);
   assert.equal(1300 - Math.floor(state.turn / 3), 1299);
-  assert.equal(state.grain, grain - 1.5);
+  assert.equal(state.grain, grain); // Each 0.5 remainder is rounded up after settlement.
 });
 
 test('saved campaigns restore their reserve, troops, position and spent movement', () => {
@@ -120,8 +205,51 @@ test('missing, corrupted or incompatible saves recover to a new campaign', () =>
 
 function stationed(terrain, quantity = 100, grain = 1000) {
   const hexId = CAMPAIGN_HEXES.find((hex) => hex.terrain === terrain).id;
-  return { ...newCampaign(), grain, nextArmyId: 2, armies: [{ id: 1, name: 'Test army', designId: 'egypt', hexId, moved: 0, units: [{ ...catalogue[0], quantity }] }] };
+  return { ...newCampaign(), grain, nextArmyId: 2, armies: [{ id: 1, name: 'Test army', designId: 'egypt', hexId, moved: 0, units: [{ ...catalogue[0], quantity, strengths: Array(quantity).fill(60) }] }] };
 }
+
+test('own difficult terrain protects every playable nation without changing movement or famine losses', () => {
+  for (const nation of ['egypt', 'hatti', 'nubia']) {
+    const ownHexes = CAMPAIGN_HEXES.filter((hex) => hex.territory === nation && TERRAIN_TYPES[hex.terrain].difficult);
+    assert.ok(ownHexes.length > 0);
+    for (const hex of ownHexes) {
+      const state = stationed(hex.terrain, 1);
+      state.nation = nation;
+      state.armies[0].designId = nation;
+      state.armies[0].hexId = hex.id;
+      assert.equal(terrainAttrition(state, hex), 0);
+      assert.equal(remainingMovement(state.armies[0]), 1);
+      const next = settle(state);
+      assert.equal(next.lastTurnReport.armies[0].terrainLosses, 0);
+      assert.equal(armyTroops(next.armies[0]), 60);
+      const hungry = settle({ ...state, grain: 0 });
+      assert.equal(hungry.lastTurnReport.armies[0].terrainLosses, 0);
+      assert.equal(hungry.lastTurnReport.armies[0].supplyLosses, 3);
+      assert.equal(armyTroops(hungry.armies[0]), 57);
+    }
+  }
+});
+
+test('neutral and enemy difficult terrain still cause rounded 3% losses, and city protection follows current ownership', () => {
+  for (const territory of [null, 'hatti']) {
+    for (const terrain of ['desert', 'mountain']) {
+      const hex = CAMPAIGN_HEXES.find((candidate) => (territory ? candidate.territory === territory : !candidate.territory) && candidate.terrain === terrain);
+      assert.ok(hex);
+      const state = stationed(terrain, 1);
+      state.armies[0].hexId = hex.id;
+      assert.equal(terrainAttrition(state, hex), 0.03);
+      const next = settle(state);
+      assert.equal(next.lastTurnReport.armies[0].terrainLosses, 2);
+      assert.equal(armyTroops(next.armies[0]), 58);
+    }
+  }
+  const city = CAMPAIGN_CITIES.find((candidate) => candidate.nation === 'hatti');
+  const hex = { ...HEX_BY_ID.get(city.hexId), terrain: 'mountain' };
+  const state = { ...newCampaign(), cityOwners: { [city.id]: 'egypt' } };
+  assert.equal(terrainAttrition(state, hex), 0);
+  assert.equal(terrainAttrition(state, hex, 'hatti'), 0.03);
+  assert.equal(terrainAttrition({ ...state, cityOwners: {} }, hex), 0.03);
+});
 
 test('all hexes have terrain metadata and only deserts and mountains cause 3% attrition', () => {
   assert.deepEqual(new Set(CAMPAIGN_HEXES.map((hex) => hex.terrain)), new Set(['water', 'coast', 'fertile', 'desert', 'mountain']));
@@ -155,79 +283,6 @@ test('entering difficult terrain exhausts movement and paths cannot jump across 
   assert.equal(reachableHexes(moved, 1).size, 0);
 });
 
-test('terrain losses apply even without movement and are rounded up once per army', () => {
-  for (const terrain of ['desert', 'mountain']) {
-    const state = stationed(terrain, 101);
-    const next = settle(state);
-    assert.equal(next.armies[0].units[0].quantity, 97);
-    assert.equal(next.lastTurnReport.armies[0].terrainLosses, 4);
-    assert.equal(state.armies[0].units[0].quantity, 101);
-  }
-  assert.equal(settle(stationed('fertile', 101)).armies[0].units[0].quantity, 101);
-  const mixed = applyCasualties([{ quantity: 10 }, { quantity: 10 }, { quantity: 10 }], 0.03);
-  assert.equal(mixed.losses, 1);
-  assert.equal(mixed.units.reduce((sum, unit) => sum + unit.quantity, 0), 29);
-});
-
-test('upkeep is 10% of every deployed unit cost and preserves fractional grain', () => {
-  const state = recruit(newCampaign(), { LIGHT_INFANTRY: 3, SPEARMEN: 2 });
-  assert.equal(armyUpkeep(state.armies[0]), 2.7);
-  assert.equal(campaignUpkeep(state), 2.7);
-  const next = settle(state);
-  assert.equal(next.grain, 70.3);
-  assert.equal(next.lastTurnReport.requiredGrain, 2.7);
-  assert.equal(next.lastTurnReport.shortage, false);
-});
-
-test('positive reserves avoid famine this turn even if consumption exhausts them; zero reserves cause 5% losses', () => {
-  const enough = settle(stationed('fertile', 21, 10.5));
-  assert.equal(enough.grain, 0);
-  assert.equal(enough.armies[0].units[0].quantity, 21);
-  assert.equal(enough.lastTurnReport.shortage, false);
-  for (const grain of [0, 10.49]) {
-    const next = settle(stationed('fertile', 21, grain));
-    assert.equal(next.grain, 0);
-    assert.equal(next.armies[0].units[0].quantity, grain === 0 ? 19 : 21);
-    assert.equal(next.lastTurnReport.armies[0].supplyLosses, grain === 0 ? 2 : 0);
-    assert.equal(next.lastTurnReport.consumedGrain, grain);
-  }
-});
-
-test('combined terrain and supply losses apply sequentially; upkeep uses the pre-loss composition', () => {
-  const next = settle(stationed('desert', 101, 0));
-  assert.equal(next.lastTurnReport.requiredGrain, 50.5);
-  assert.equal(next.lastTurnReport.armies[0].terrainLosses, 4);
-  assert.equal(next.lastTurnReport.armies[0].supplyLosses, 5);
-  assert.equal(next.armies[0].units[0].quantity, 92);
-  assert.equal(next.armies[0].moved, 0);
-  assert.equal(campaignUpkeep(next), 46);
-});
-
-test('all deployed armies suffer supply losses when the shared reserve starts empty', () => {
-  const state = stationed('fertile', 21, 0);
-  state.armies.push({ ...state.armies[0], id: 2, hexId: '7,10' });
-  state.nextArmyId = 3;
-  const next = settle(state);
-  assert.equal(next.lastTurnReport.requiredGrain, 21);
-  assert.deepEqual(next.armies.map((army) => army.units[0].quantity), [19, 19]);
-});
-
-test('armies with no surviving units are removed, free their hex and remain in the turn report', () => {
-  const state = stationed('desert', 1);
-  const next = settle(state);
-  assert.equal(next.armies.length, 0);
-  assert.equal(next.lastTurnReport.armies[0].destroyed, true);
-  assert.equal(campaignUpkeep(next), 0);
-  const empty = settle(newCampaign());
-  assert.equal(empty.grain, 100);
-  assert.deepEqual(empty.lastTurnReport.armies, []);
-});
-
-test('supply and terrain results survive saving without resetting existing campaigns', () => {
-  const next = settle(stationed('mountain', 101, 1));
-  assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(next) }), next);
-});
-
 test('Euphrates and Jordan valleys override difficult terrain and have no attrition', () => {
   for (const river of RIVERS.filter((entry) => entry.id !== 'nile')) {
     for (const [x, y] of river.path) assert.equal(terrainAt(x, y, true), 'fertile');
@@ -236,15 +291,72 @@ test('Euphrates and Jordan valleys override difficult terrain and have no attrit
     for (const hex of hexes) {
       assert.ok(['fertile', 'coast'].includes(hex.terrain));
       assert.equal(TERRAIN_TYPES[hex.terrain].attritionRate, 0);
-      assert.equal(TERRAIN_TYPES[hex.terrain].production, 1);
+      assert.equal(TERRAIN_TYPES[hex.terrain].production, 0);
     }
   }
 });
 
-test('water, coastal access and rivers produce one grain and Egyptian production accumulates', () => {
-  for (const [id, terrain] of Object.entries(TERRAIN_TYPES)) assert.equal(terrain.production, ['fertile', 'coast', 'water'].includes(id) ? 1 : 0);
-  for (const hex of CAMPAIGN_HEXES) assert.equal(hex.production, hex.waterAccess ? 1 : 0);
-  assert.equal(nextSeason(newCampaign()).grain, 100 + campaignProduction(newCampaign()));
+test('only cities produce grain and Egyptian production accumulates annually', () => {
+  for (const terrain of Object.values(TERRAIN_TYPES)) assert.equal(terrain.production, 0);
+  for (const hex of CAMPAIGN_HEXES) assert.equal(hex.production, hex.city?.grain || 0);
+  let state = newCampaign();
+  const production = campaignProduction(state);
+  for (let turn = 1; turn <= 6; turn += 1) {
+    state = nextSeason(state);
+    assert.equal(state.grain, 100 + Math.floor(turn / 3) * production);
+    assert.equal(state.lastTurnReport.producedGrain, turn % 3 === 0 ? production : 0);
+  }
+});
+
+test('annual harvest pays once across saved games while upkeep remains seasonal for every playable nation', () => {
+  for (const nation of ['egypt', 'hatti', 'nubia']) {
+    let state = recruitArmy(newCampaign(nation), { name: 'Guard', designId: nation, quantities: { LIGHT_INFANTRY: 1 } }, [{ ...catalogue[0], grainCost: 10 }]);
+    const production = campaignProduction(state);
+    for (let turn = 1; turn <= 4; turn += 1) {
+      state = nextSeason(loadCampaign({ getItem: () => JSON.stringify(state) }, nation));
+      assert.equal(state.grain, 90 - turn + Math.floor(turn / 3) * production);
+      assert.equal(state.lastTurnReport.consumedGrain, 1);
+      assert.equal(state.lastTurnReport.producedGrain, turn === 3 ? production : 0);
+    }
+  }
+});
+
+test('cities have unique land hexes in their nation and exactly one capital per civilization', () => {
+  assert.equal(new Set(CAMPAIGN_CITIES.map((city) => city.hexId)).size, CAMPAIGN_CITIES.length);
+  assert.equal(new Set(CAMPAIGN_CITIES.map((city) => city.id)).size, CAMPAIGN_CITIES.length);
+  for (const [nation, count, grain] of [['egypt', 6, 31], ['hatti', 6, 30], ['nubia', 3, 20]]) {
+    const cities = CAMPAIGN_CITIES.filter((city) => city.nation === nation);
+    assert.equal(cities.length, count);
+    assert.equal(cities.filter((city) => city.capital).length, 1);
+    assert.equal(campaignProduction(newCampaign(nation)), grain);
+    for (const city of cities) {
+      const hex = HEX_BY_ID.get(city.hexId);
+      assert.equal(hex.land, true);
+      assert.equal(hex.territory, nation);
+      assert.equal(hex.city, city);
+      assert.equal(hex.production, city.grain);
+      assert.equal(Number.isInteger(city.grain), true);
+      assert.ok(city.grain >= 2 && city.grain <= 8);
+      if (nation === 'nubia') assert.equal(hex.river, null);
+    }
+  }
+  assert.equal(campaignProduction(newCampaign('seapeople')), 0);
+});
+
+test('city positions preserve north-south order and the requested Hittite coastal relocations', () => {
+  const cityHex = (id) => HEX_BY_ID.get(CAMPAIGN_CITIES.find((city) => city.id === id).hexId);
+  for (const ids of [
+    ['nubia-1', 'nubia-2', 'nubia-3'],
+    ['egypt-2', 'egypt-1', 'egypt-3', 'egypt-4', 'egypt-5', 'egypt-6'],
+    ['hatti-2', 'hatti-3', 'hatti-5'],
+  ]) {
+    for (let index = 1; index < ids.length; index += 1) assert.ok(cityHex(ids[index - 1]).row < cityHex(ids[index]).row);
+  }
+  for (const id of ['hatti-2', 'hatti-3', 'hatti-5']) assert.equal(cityHex(id).terrain, 'coast');
+  assert.equal(cityHex('hatti-5').id, '15,6'); // Visible hex 16,7: Gaza.
+  assert.equal(cityHex('hatti-6').id, '16,7'); // Visible hex 17,8: Megiddo.
+  assert.ok(cityHex('hatti-4').row < cityHex('hatti-6').row);
+  assert.equal(CAMPAIGN_CITIES.find((city) => city.id === 'hatti-1').capital, true);
 });
 
 test('Egypt includes the Nile corridor through visible row 34; Nubia begins at row 35 and Sinai is neutral', () => {
@@ -258,8 +370,8 @@ test('Egypt includes the Nile corridor through visible row 34; Nubia begins at r
 
 test('national border paths are unique and use yellow, blue and purple on their respective sides', () => {
   assert.equal(new Set(CAMPAIGN_BORDERS.map((border) => border.id)).size, CAMPAIGN_BORDERS.length);
-  assert.deepEqual(CAMPAIGN_NATIONS, { egypt: { color: '#f5d52b' }, assyria: { color: '#428fff' }, nubia: { color: '#b55de8' } });
-  for (const id of ['egypt', 'assyria', 'nubia']) assert.ok(CAMPAIGN_BORDERS.some((border) => border.territory === id));
+  assert.deepEqual(CAMPAIGN_NATIONS, { egypt: { color: '#f5d52b' }, hatti: { color: '#428fff' }, nubia: { color: '#b55de8' } });
+  for (const id of ['egypt', 'hatti', 'nubia']) assert.ok(CAMPAIGN_BORDERS.some((border) => border.territory === id));
   assert.ok(CAMPAIGN_BORDERS.every((border) => !isSinai(HEX_BY_ID.get(border.hexId))));
   assert.ok(CAMPAIGN_BORDERS.some((border) => border.hexId === '7,33' && border.territory === 'egypt'));
   assert.ok(CAMPAIGN_BORDERS.some((border) => border.hexId === '7,34' && border.territory === 'nubia'));
@@ -277,12 +389,12 @@ test('the Nile corridor extends two neighboring hexes to either side and exclude
   assert.ok(CAMPAIGN_HEXES.filter((hex) => hex.land && isSinai(hex)).every((hex) => hex.territory === null));
 });
 
-test('Assyria includes both river corridors and the Levant coast without annexing Sinai or Arabia', () => {
-  for (const hex of CAMPAIGN_HEXES.filter((candidate) => ['euphrates','jordan'].includes(candidate.river))) assert.equal(hex.territory, 'assyria');
-  const coasts = CAMPAIGN_HEXES.filter((hex) => hex.territory === 'assyria' && hex.terrain === 'coast');
+test('Hatti includes both river corridors and the Levant coast without annexing Sinai or Arabia', () => {
+  for (const hex of CAMPAIGN_HEXES.filter((candidate) => ['euphrates','jordan'].includes(candidate.river))) assert.equal(hex.territory, 'hatti');
+  const coasts = CAMPAIGN_HEXES.filter((hex) => hex.territory === 'hatti' && hex.terrain === 'coast');
   assert.ok(coasts.length > 5);
-  for (const hex of coasts) { assert.equal(hex.land, true); assert.equal(hex.production, 1); }
-  assert.ok(CAMPAIGN_HEXES.filter((hex) => hex.territory === 'assyria').every((hex) => hex.y < 400));
+  for (const hex of coasts) { assert.equal(hex.land, true); assert.equal(hex.production, hex.city?.grain || 0); }
+  assert.ok(CAMPAIGN_HEXES.filter((hex) => hex.territory === 'hatti').every((hex) => hex.y < 400));
 });
 
 test('mixed land/sea hexes remain coastal land and are traversable, while open sea remains blocked', () => {
@@ -291,92 +403,12 @@ test('mixed land/sea hexes remain coastal land and are traversable, while open s
   for (const hex of coasts) {
     assert.equal(hex.terrain, 'coast');
     assert.equal(hex.land, true);
-    assert.equal(hex.production, 1);
+    assert.equal(hex.production, hex.city?.grain || 0);
   }
-  const coastal = coasts.find((hex) => hex.territory === 'assyria' && neighbors(hex.id).length);
+  const coastal = coasts.find((hex) => hex.territory === 'hatti' && neighbors(hex.id).length);
   assert.ok(coastal);
   const state = stationed('fertile', 1);
   state.armies[0].hexId = neighbors(coastal.id)[0].id;
   assert.ok(reachableHexes(state, 1).has(coastal.id));
   for (const hex of CAMPAIGN_HEXES.filter((hex) => !hex.land)) assert.equal(hex.terrain, 'water');
-});
-
-test('situation prioritizes empty reserves; positive reserves distinguish surplus, deficit and equality', () => {
-  const state = stationed('fertile', 20, 1);
-  assert.equal(campaignEconomy(state, 11).situation, 'abundance');
-  assert.equal(campaignEconomy(state, 9).situation, 'scarcity');
-  assert.equal(campaignEconomy(state, 10).situation, 'scarcity');
-  assert.equal(campaignEconomy({ ...state, grain: 0 }, 100).situation, 'famine');
-});
-
-test('only productive Egyptian territory contributes to the campaign grain reserve', () => {
-  const state = newCampaign();
-  const expected = CAMPAIGN_HEXES.filter((hex) => hex.land && hex.territory === 'egypt' && hex.waterAccess).length;
-  assert.ok(expected > 0);
-  assert.equal(campaignProduction(state), expected);
-  const next = nextSeason(state);
-  assert.equal(next.lastTurnReport.producedGrain, expected);
-  assert.equal(next.grain, 100 + expected);
-});
-
-test('income and upkeep settle once per turn and never create negative grain balances', () => {
-  const state = stationed('fertile', 20, 1);
-  const next = settle(state, { production: 8 });
-  assert.equal(next.lastTurnReport.situation, 'scarcity');
-  assert.equal(next.lastTurnReport.consumedGrain, 9);
-  assert.equal(next.grain, 0);
-  assert.equal(next.armies[0].units[0].quantity, 20);
-  const famine = settle(next, { production: 8 });
-  assert.equal(famine.lastTurnReport.situation, 'famine');
-  assert.equal(famine.armies[0].units[0].quantity, 19);
-  assert.equal(famine.grain, 0);
-});
-
-test('abundance restores 5% of missing troops rounded up, capped at the original troop counts', () => {
-  const army = recruit(newCampaign(), { LIGHT_INFANTRY: 10, SPEARMEN: 5 }).armies[0];
-  const wounded = [{ ...army.units[0], quantity: 4 }, { ...army.units[1], quantity: 3 }];
-  const result = recoverCasualties(wounded, army.initialUnits);
-  assert.equal(result.recovered, 1); // ceil(8 missing × 0.05)
-  assert.deepEqual(result.units.map((unit) => unit.quantity), [5, 3]);
-  let units = wounded;
-  for (let turn = 0; turn < 30; turn += 1) units = recoverCasualties(units, army.initialUnits).units;
-  assert.deepEqual(units.map((unit) => unit.quantity), [10, 5]);
-  assert.equal(recoverCasualties(units, army.initialUnits).recovered, 0);
-});
-
-test('abundance restores a depleted troop type from the original roster without exceeding its capacity', () => {
-  const army = recruit(newCampaign(), { LIGHT_INFANTRY: 5, SPEARMEN: 5 }).armies[0];
-  const result = recoverCasualties([army.units[0]], army.initialUnits);
-  assert.equal(result.recovered, 1);
-  assert.deepEqual(result.units.map((unit) => unit.quantity), [5, 1]);
-});
-
-test('only abundance heals; scarcity leaves wounded troops unchanged and famine causes further losses', () => {
-  const state = stationed('fertile', 10, 100);
-  state.armies[0].initialUnits = [{ ...state.armies[0].units[0], quantity: 30 }];
-  assert.equal(settle(state, { production: 6 }).armies[0].units[0].quantity, 11);
-  assert.equal(settle(state, { production: 5 }).armies[0].units[0].quantity, 10);
-  assert.equal(settle(state, { production: 4 }).armies[0].units[0].quantity, 10);
-  const famine = settle({ ...state, grain: 0 }, { production: 100 });
-  assert.equal(famine.armies[0].units[0].quantity, 9);
-  assert.equal(famine.lastTurnReport.armies[0].recoveredUnits, 0);
-  assert.equal(famine.grain, 95);
-});
-
-test('recovery caps survive casualties, saving and loading; legacy armies establish a baseline without resetting', () => {
-  const legacy = stationed('fertile', 20, 0);
-  const wounded = settle(legacy);
-  assert.equal(wounded.armies[0].initialUnits[0].quantity, 20);
-  const saved = loadCampaign({ getItem: () => JSON.stringify(wounded) });
-  const recovered = settle({ ...saved, grain: 1 }, { production: 100 });
-  assert.equal(recovered.armies[0].units[0].quantity, 20);
-  assert.equal(recovered.armies[0].initialUnits[0].quantity, 20);
-});
-
-test('terrain attrition still applies in scarcity and annihilated armies cannot be resurrected by abundance', () => {
-  const scarcity = settle(stationed('mountain', 100), { production: 0 });
-  assert.equal(scarcity.armies[0].units[0].quantity, 97);
-  const destroyed = settle(stationed('mountain', 1), { production: 100 });
-  assert.equal(destroyed.lastTurnReport.situation, 'abundance');
-  assert.equal(destroyed.armies.length, 0);
 });

@@ -2,6 +2,8 @@ Class BronzeWars.Data.Seed Extends %RegisteredObject
 {
 ClassMethod Run() As %Status
 {
+    set sc = ##class(BronzeWars.Data.NationMigration).Run()
+    return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..SeedUnitTypes()
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..SeedUnitProfiles()
@@ -74,7 +76,7 @@ ClassMethod SeedUnitTypes() As %Status [ Private ]
 
 ClassMethod SeedUnitProfiles() As %Status [ Private ]
 {
-    for faction = "EGYPTIAN","ASSYRIAN" {
+    for faction = "EGYPTIAN","HITTITE" {
         set sc = ..CopyProfile("LIGHT_INFANTRY", faction) return:$SYSTEM.Status.IsError(sc) sc
         set sc = ..CopyProfile("HEAVY_INFANTRY", faction) return:$SYSTEM.Status.IsError(sc) sc
         set sc = ..CopyProfile("MERCENARIES", faction) return:$SYSTEM.Status.IsError(sc) sc
@@ -85,23 +87,23 @@ ClassMethod SeedUnitProfiles() As %Status [ Private ]
     }
     set sc = ..UpsertUnitProfile("LIGHT_INFANTRY", "EGYPTIAN", 60, 2, 4, 2, 2, 5, "Proyectiles ligeros", 6)
     return:$SYSTEM.Status.IsError(sc) sc
-    set sc = ..UpsertUnitProfile("LIGHT_INFANTRY", "ASSYRIAN", 60, 2, 3, 2, 2, 5, "Proyectiles ligeros", 4)
+    set sc = ..UpsertUnitProfile("LIGHT_INFANTRY", "HITTITE", 60, 2, 3, 2, 2, 5, "Proyectiles ligeros", 4)
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitProfile("HEAVY_INFANTRY", "EGYPTIAN", 100, 1, 6, 8, 1, 8, "Cuerpo a cuerpo", 8)
     return:$SYSTEM.Status.IsError(sc) sc
-    set sc = ..UpsertUnitProfile("HEAVY_INFANTRY", "ASSYRIAN", 100, 1, 8, 10, 1, 8, "Cuerpo a cuerpo", 10)
+    set sc = ..UpsertUnitProfile("HEAVY_INFANTRY", "HITTITE", 100, 1, 8, 10, 1, 8, "Cuerpo a cuerpo", 10)
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitProfile("MERCENARIES", "EGYPTIAN", 100, 2, 6, 6, 1, 7, "Cuerpo a cuerpo", 8)
     return:$SYSTEM.Status.IsError(sc) sc
-    set sc = ..UpsertUnitProfile("MERCENARIES", "ASSYRIAN", 100, 2, 6, 6, 1, 7, "Cuerpo a cuerpo", 8)
+    set sc = ..UpsertUnitProfile("MERCENARIES", "HITTITE", 100, 2, 6, 6, 1, 7, "Cuerpo a cuerpo", 8)
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitProfile("HEAVY_CAVALRY", "EGYPTIAN", 25, 2, 8, 7, 1, 10, "Cuerpo a cuerpo", 23)
     return:$SYSTEM.Status.IsError(sc) sc
-    set sc = ..UpsertUnitProfile("HEAVY_CAVALRY", "ASSYRIAN", 25, 2, 10, 9, 1, 10, "Cuerpo a cuerpo", 26)
+    set sc = ..UpsertUnitProfile("HEAVY_CAVALRY", "HITTITE", 25, 2, 10, 9, 1, 10, "Cuerpo a cuerpo", 26)
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitProfile("CHARIOTS", "EGYPTIAN", 20, 3, 5, 3, 5, 10, "Flechas", 22)
     return:$SYSTEM.Status.IsError(sc) sc
-    set sc = ..UpsertUnitProfile("CHARIOTS", "ASSYRIAN", 15, 3, 6, 4, 2, 18, "Jabalinas", 25)
+    set sc = ..UpsertUnitProfile("CHARIOTS", "HITTITE", 15, 3, 6, 4, 2, 18, "Jabalinas", 25)
     return:$SYSTEM.Status.IsError(sc) sc
     set sc = ..UpsertUnitProfile("ARCHERS", "NUBIAN", 80, 2, 5, 1, 6, 9, "Flechas", 7)
     return:$SYSTEM.Status.IsError(sc) sc
