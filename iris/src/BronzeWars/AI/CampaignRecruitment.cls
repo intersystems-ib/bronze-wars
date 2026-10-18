@@ -14,6 +14,8 @@ ClassMethod Decide(capacity As %DynamicObject) As %DynamicObject
         if capacity.%GetTypeOf("capitalAvailable") '= "boolean" return ##class(BronzeWars.Service.Result).Error(400, "INVALID_CAPACITY", "Falta el estado de la capital.")
         set deploymentValidation = ..ValidateDeploymentContext(capacity)
         if 'deploymentValidation.ok return deploymentValidation
+        set blocked = ..RecruitmentBlock(capacity)
+        if blocked '= "" return ##class(BronzeWars.Service.Result).Success(200, {"action":"wait","reason":(blocked),"source":"RULES","blockReason":(blocked)})
         set ^BronzeWarsCampaignContext(contextId, "capacity") = capacity.%ToJSON()
         set provider = ##class(BronzeWars.AI.Agent.Campaign).CreateProvider()
         set sc = provider.ValidateConfig()
@@ -45,6 +47,20 @@ ClassMethod Decide(capacity As %DynamicObject) As %DynamicObject
         do details.%Push({"field":"model","message":($extract(exception.DisplayString(),1,1000))})
         return ##class(BronzeWars.Service.Result).Error(503, "CAMPAIGN_LLM_UNAVAILABLE", "El modelo local no ha completado una decision de reclutamiento valida.", details)
     }
+}
+
+ClassMethod RecruitmentBlock(capacity As %DynamicObject) As %String
+{
+    if capacity.annualProduction + 0.000000001 < (capacity.consumptionPerTurn * 3) return "PRODUCTION_DEFICIT"
+    set cheapest = ""
+    for index = 0:1:(capacity.units.%Size()-1) {
+        set unit = capacity.units.%Get(index)
+        if (unit.%GetTypeOf("cost") = "number"), unit.cost > 0 {
+            if (cheapest = "") || (unit.cost < cheapest) set cheapest = unit.cost
+        }
+    }
+    if (cheapest = "") || (capacity.reserve < (cheapest * ##class(BronzeWars.Rules.ArmyBudget).#MINUNITS)) return "INSUFFICIENT_GRAIN"
+    return ""
 }
 
 ClassMethod ValidateDeploymentContext(capacity As %DynamicObject) As %DynamicObject
@@ -105,7 +121,11 @@ ClassMethod ValidateDecision(answer As %DynamicObject, capacity As %DynamicObjec
         }
         if 'found return $$$ERROR($$$GeneralError, "Unknown national unit")
     }
-    if (count < 1) || (cost > capacity.reserve) return $$$ERROR($$$GeneralError, "Unaffordable army")
+    if count < ##class(BronzeWars.Rules.ArmyBudget).#MINUNITS return $$$ERROR($$$GeneralError, "Army requires at least four divisions")
+    if cost > capacity.reserve return $$$ERROR($$$GeneralError, "Unaffordable army")
+    if capacity.%IsDefined("annualProduction"), capacity.%IsDefined("consumptionPerTurn") {
+        if ..RecruitmentBlock(capacity) '= "" return $$$ERROR($$$GeneralError, "Recruitment blocked by production or reserves")
+    }
     return $$$OK
 }
 

@@ -20,7 +20,7 @@ function recruit(state, quantities, designId = 'egypt') {
 }
 
 test('disbanding removes only the selected friendly army, frees its capital and stops its upkeep without a refund', () => {
-  const state = recruit(newCampaign(), { LIGHT_INFANTRY: 2 });
+  const state = recruit(newCampaign(), { LIGHT_INFANTRY: 4 });
   const capital = state.armies[0].hexId;
   const other = { ...state.armies[0], id: 2, hexId: neighbors(capital)[0].id };
   const enemy = { ...other, id: 3, designId: 'hatti', hexId: '17,0' };
@@ -32,10 +32,10 @@ test('disbanding removes only the selected friendly army, frees its capital and 
   assert.equal(next.grain, state.grain);
   assert.equal(next.turn, state.turn);
   assert.equal(next.nextArmyId, 4);
-  assert.equal(campaignUpkeep(state), 2);
-  assert.equal(campaignUpkeep(next), 1);
+  assert.equal(campaignUpkeep(state), 4);
+  assert.equal(campaignUpkeep(next), 2);
   assert.equal(findSpawn(next), capital);
-  assert.equal(settle(next).grain, state.grain - 1);
+  assert.equal(settle(next).grain, state.grain - 2);
   assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(next) }), next);
   assert.equal(disbandArmy(next, 3), next);
   assert.equal(disbandArmy(next, 999), next);
@@ -71,7 +71,7 @@ test('recruitment spends the shared 100-grain reserve and preserves composition 
 
 test('empty, fractional, negative and unaffordable armies are rejected', () => {
   const state = newCampaign();
-  for (const quantities of [{}, { LIGHT_INFANTRY: 0 }, { SPEARMEN: -1 }, { LIGHT_INFANTRY: 0.5 }, { CHARIOTS: 9 }]) {
+  for (const quantities of [{}, { LIGHT_INFANTRY: 0 }, { LIGHT_INFANTRY: 1 }, { LIGHT_INFANTRY: 2 }, { LIGHT_INFANTRY: 3 }, { LIGHT_INFANTRY: 1, SPEARMEN: 2 }, { SPEARMEN: -1 }, { LIGHT_INFANTRY: 0.5 }, { CHARIOTS: 9 }]) {
     assert.equal(recruit(state, quantities), state);
   }
 });
@@ -79,40 +79,40 @@ test('empty, fractional, negative and unaffordable armies are rejected', () => {
 test('recruitment uses free capital-region hexes and subsequent armies share reserves without stacking', () => {
   let state = newCampaign('nubia');
   const capital = findSpawn(state);
-  state = recruit(state, { LIGHT_INFANTRY: 1 }, 'nubia');
+  state = recruit(state, { LIGHT_INFANTRY: 4 }, 'nubia');
   assert.equal(state.armies[0].hexId, capital);
   const nearby = findSpawn(state);
   assert.notEqual(nearby, capital);
   assert.equal(HEX_BY_ID.get(nearby).regionId, HEX_BY_ID.get(capital).regionId);
-  const expanded = recruit(state, { LIGHT_INFANTRY: 1 }, 'nubia');
+  const expanded = recruit(state, { LIGHT_INFANTRY: 4 }, 'nubia');
   assert.equal(expanded.armies[1].hexId, nearby);
-  assert.equal(expanded.grain, 90);
+  assert.equal(expanded.grain, 60);
   state = moveArmy(state, 1, reachableHexes(state, 1).keys().next().value);
   assert.equal(findSpawn(state), capital);
-  state = recruit(state, { LIGHT_INFANTRY: 1 }, 'nubia');
-  assert.equal(state.grain, 90);
+  state = recruit(state, { LIGHT_INFANTRY: 4 }, 'nubia');
+  assert.equal(state.grain, 60);
   assert.equal(state.armies.length, 2);
   assert.equal(state.armies[1].hexId, capital);
   assert.equal(new Set(state.armies.map((army) => army.hexId)).size, 2);
   assert.ok(state.armies.every((army) => army.designId === 'nubia'));
   assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(state) }, 'nubia'), state);
-  assert.equal(recruit(state, { LIGHT_INFANTRY: 1 }), state);
+  assert.equal(recruit(state, { LIGHT_INFANTRY: 4 }), state);
 });
 
-test('all nations can fill their capital region, but never stack, use other regions, or deploy after losing the capital', () => {
+test('all nations fill their capital region without stacking and relocate deployment after losing the original capital', () => {
   for (const nation of ['egypt', 'hatti', 'nubia']) {
     const state = { ...newCampaign(nation), grain: 10000 };
     const capital = CAMPAIGN_CITIES.find((city) => city.nation === nation && city.capital);
     assert.equal(findSpawn(state), capital.hexId);
-    const occupied = recruit(state, { LIGHT_INFANTRY: 1 }, nation);
+    const occupied = recruit(state, { LIGHT_INFANTRY: 4 }, nation);
     occupied.armies[0].designId = nation === 'egypt' ? 'hatti' : 'egypt';
-    const reinforced = recruit(occupied, { LIGHT_INFANTRY: 1 }, nation);
+    const reinforced = recruit(occupied, { LIGHT_INFANTRY: 4 }, nation);
     assert.equal(reinforced.armies.length, 2);
     assert.notEqual(reinforced.armies[1].hexId, capital.hexId);
     let filled = state;
     const region = CAMPAIGN_HEXES.filter((hex) => hex.regionId === capital.id);
     for (let index = 0; index < region.length; index += 1) {
-      const next = recruit(filled, { LIGHT_INFANTRY: 1 }, nation);
+      const next = recruit(filled, { LIGHT_INFANTRY: 4 }, nation);
       assert.equal(next.armies.length, index + 1);
       assert.equal(HEX_BY_ID.get(next.armies.at(-1).hexId).regionId, capital.id);
       assert.ok(HEX_BY_ID.get(next.armies.at(-1).hexId).land);
@@ -120,11 +120,12 @@ test('all nations can fill their capital region, but never stack, use other regi
     }
     assert.equal(new Set(filled.armies.map((army) => army.hexId)).size, region.length);
     assert.equal(findSpawn(filled), null);
-    assert.equal(recruit(filled, { LIGHT_INFANTRY: 1 }, nation), filled);
+    assert.equal(recruit(filled, { LIGHT_INFANTRY: 4 }, nation), filled);
     assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(filled) }, nation), filled);
     const lost = { ...state, cityOwners: { [capital.id]: nation === 'egypt' ? 'hatti' : 'egypt' } };
-    assert.equal(findSpawn(lost), null);
-    assert.equal(recruit(lost, { LIGHT_INFANTRY: 1 }, nation), lost);
+    assert.ok(findSpawn(lost));
+    assert.notEqual(HEX_BY_ID.get(findSpawn(lost)).regionId, capital.id);
+    assert.equal(recruit(lost, { LIGHT_INFANTRY: 4 }, nation).armies.length, 1);
   }
 });
 
@@ -142,17 +143,17 @@ test('movement is weighted by each troop quantity and only whole hexes can be tr
   assert.equal(moveArmy(moved, army.id, army.hexId), moved);
 });
 
-test('movement tracks the distance of multi-hex paths and rejects occupied, sea and distant hexes', () => {
-  let state = recruit(newCampaign(), { CHARIOTS: 1 });
+test('movement tracks multi-hex paths, permits friendly merge destinations and rejects sea and distant hexes', () => {
+  let state = recruit(newCampaign(), { CHARIOTS: 4 });
   state = moveArmy(state, 1, neighbors(state.armies[0].hexId).find((hex) => hex.terrain === 'fertile').id);
   state = settle(state);
-  state = recruit(state, { LIGHT_INFANTRY: 1 });
+  state = recruit(state, { LIGHT_INFANTRY: 4 });
   const army = state.armies[0];
   const reachable = reachableHexes(state, army.id);
   const destination = [...reachable].find(([, cost]) => cost === 3)?.[0];
   assert.ok(destination);
-  assert.equal(reachable.has(state.armies[1].hexId), false);
-  assert.equal(moveArmy(state, army.id, state.armies[1].hexId), state);
+  assert.equal(reachable.has(state.armies[1].hexId), true);
+  assert.equal(moveArmy(state, army.id, state.armies[1].hexId).armies.length, 1);
   assert.equal(moveArmy(state, army.id, CAMPAIGN_HEXES.find((hex) => !hex.land).id), state);
   assert.equal(moveArmy(state, army.id, '0,40'), state);
   assert.equal(moveArmy(state, army.id, 'invalid'), state);
@@ -164,7 +165,7 @@ test('hex adjacency is symmetric and an army can return to its previous position
   for (const hex of CAMPAIGN_HEXES.filter((hex) => hex.land)) {
     for (const other of neighbors(hex.id)) assert.ok(neighbors(other.id).some((candidate) => candidate.id === hex.id));
   }
-  let state = recruit(newCampaign(), { LIGHT_INFANTRY: 1 });
+  let state = recruit(newCampaign(), { LIGHT_INFANTRY: 4 });
   const origin = state.armies[0].hexId;
   const target = [...reachableHexes(state, 1).keys()].find((id) => HEX_BY_ID.get(id).terrain === 'fertile');
   state = moveArmy(state, 1, target);
@@ -175,7 +176,7 @@ test('hex adjacency is symmetric and an army can return to its previous position
 });
 
 test('seasons restore movement and advance to 1299 BC after the third turn while charging upkeep', () => {
-  let state = recruit(newCampaign(), { LIGHT_INFANTRY: 1 });
+  let state = recruit(newCampaign(), { LIGHT_INFANTRY: 4 });
   const grain = state.grain;
   const fertile = [...reachableHexes(state, 1).keys()].find((id) => HEX_BY_ID.get(id).terrain === 'fertile');
   state = moveArmy(state, 1, fertile);
@@ -185,11 +186,11 @@ test('seasons restore movement and advance to 1299 BC after the third turn while
   state = settle(settle(state));
   assert.equal(state.turn % 3, 0);
   assert.equal(1300 - Math.floor(state.turn / 3), 1299);
-  assert.equal(state.grain, grain); // Each 0.5 remainder is rounded up after settlement.
+  assert.equal(state.grain, grain - 6);
 });
 
 test('saved campaigns restore their reserve, troops, position and spent movement', () => {
-  let state = recruit(newCampaign(), { LIGHT_INFANTRY: 1 });
+  let state = recruit(newCampaign(), { LIGHT_INFANTRY: 4 });
   state = moveArmy(state, 1, reachableHexes(state, 1).keys().next().value);
   const storage = { getItem(key) { assert.equal(key, CAMPAIGN_STORAGE_KEY); return JSON.stringify(state); } };
   assert.deepEqual(loadCampaign(storage), state);
@@ -275,7 +276,7 @@ test('desert and mountain movement is limited to one neighboring hex and cannot 
 });
 
 test('entering difficult terrain exhausts movement and paths cannot jump across it', () => {
-  const state = recruit(newCampaign(), { CHARIOTS: 1 });
+  const state = recruit(newCampaign(), { CHARIOTS: 4 });
   const target = [...reachableHexes(state, 1).keys()].find((id) => TERRAIN_TYPES[HEX_BY_ID.get(id).terrain].difficult);
   assert.ok(target);
   const moved = moveArmy(state, 1, target);
@@ -310,12 +311,12 @@ test('only cities produce grain and Egyptian production accumulates annually', (
 
 test('annual harvest pays once across saved games while upkeep remains seasonal for every playable nation', () => {
   for (const nation of ['egypt', 'hatti', 'nubia']) {
-    let state = recruitArmy(newCampaign(nation), { name: 'Guard', designId: nation, quantities: { LIGHT_INFANTRY: 1 } }, [{ ...catalogue[0], grainCost: 10 }]);
+    let state = recruitArmy(newCampaign(nation), { name: 'Guard', designId: nation, quantities: { LIGHT_INFANTRY: 4 } }, [{ ...catalogue[0], grainCost: 10 }]);
     const production = campaignProduction(state);
     for (let turn = 1; turn <= 4; turn += 1) {
       state = nextSeason(loadCampaign({ getItem: () => JSON.stringify(state) }, nation));
-      assert.equal(state.grain, 90 - turn + Math.floor(turn / 3) * production);
-      assert.equal(state.lastTurnReport.consumedGrain, 1);
+      assert.equal(state.grain, 60 - turn * 4 + Math.floor(turn / 3) * production);
+      assert.equal(state.lastTurnReport.consumedGrain, 4);
       assert.equal(state.lastTurnReport.producedGrain, turn === 3 ? production : 0);
     }
   }

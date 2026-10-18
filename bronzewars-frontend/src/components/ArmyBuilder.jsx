@@ -1,4 +1,4 @@
-import { GRAIN_BUDGET } from '../config/armyRules';
+import { GRAIN_BUDGET, MIN_ARMY_DIVISIONS } from '../config/armyRules';
 import { useI18n } from '../i18n/I18nContext';
 import UnitArtwork from './UnitArtwork';
 
@@ -113,7 +113,7 @@ export default function ArmyBuilder({ unitTypes, quantities, armyDesignId, loadi
         })}
       </div>
       {remaining < 0 && <p className="field-error">{t('armyBuilder.overBudget', { total: budget })}</p>}
-      {unitCount === 0 && <p className="field-error">{t('armyBuilder.emptyArmy')}</p>}
+      {unitCount < MIN_ARMY_DIVISIONS && <p className="field-error">{t('armyBuilder.minimumDivisions', { count: MIN_ARMY_DIVISIONS })}</p>}
     </fieldset>
   );
 }

@@ -67,7 +67,6 @@ ClassMethod BattleUnit(unit As BronzeWars.Model.BattleUnit, hidePosition As %Boo
     set remainingMovement = speed - movementSpent
     if remainingMovement < 0 set remainingMovement = 0
     set unitType = ..UnitType(unit.UnitType, 1, unit.Army.Faction)
-    if unit.CampaignInitialStrength '= "" do unitType.%Set("initialStrength", unit.CampaignInitialStrength)
     set projectiles = $select(unit.CurrentProjectiles="":unit.UnitType.InitialProjectiles, 1:unit.CurrentProjectiles)
     set value = {"id":(unit.%Id()),"name":(unit.Name),"type":(unitType),"currentStrength":(unit.CurrentStrength),"projectiles":(projectiles),"morale":(morale),"movementSpent":(movementSpent),"remainingMovement":(remainingMovement),"isDeployed":(unit.IsDeployed),"hasMoved":(unit.HasMoved),"hasAttacked":(unit.HasAttacked),"active":(unit.Active)}
     if unit.CampaignSlot '= "" do value.%Set("campaignSlot", unit.CampaignSlot)

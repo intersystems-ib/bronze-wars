@@ -59,7 +59,7 @@ ClassMethod ValidateArmy(army As %DynamicObject) As %Integer
         if '$isobject(profile) throw ##class(%Exception.General).%New("Unavailable unit")
         if 'profile.Active ! (type.Code="MERCENARIES") ! $data(seen(type.Code)) throw ##class(%Exception.General).%New("Unavailable or duplicate unit")
         set seen(type.Code)=1
-        if (item.%GetTypeOf("quantity")'="number") ! (item.quantity<1) ! (item.quantity>99) ! (item.quantity'=(item.quantity\1)) ! (item.%GetTypeOf("strengths")'="array") throw ##class(%Exception.General).%New("Invalid quantity")
+        if (item.%GetTypeOf("quantity")'="number") ! (item.quantity<1) ! (item.quantity'=(item.quantity\1)) ! (item.%GetTypeOf("strengths")'="array") throw ##class(%Exception.General).%New("Invalid quantity")
         if item.strengths.%Size()'=item.quantity throw ##class(%Exception.General).%New("Invalid strengths")
         for slot=0:1:(item.quantity-1) {
             set strength = item.strengths.%Get(slot)

@@ -10,6 +10,38 @@ export function armyTroops(army) {
   return army.units.reduce((sum, unit) => sum + unitTroops(unit), 0);
 }
 
+export function wearMorale(morale = 100, rate = 0) {
+  return Math.max(0, morale - Math.ceil(morale * rate - 1e-9));
+}
+
+export function recoverMorale(morale = 100, rate = 0.05) {
+  return Math.min(100, morale + Math.ceil((100 - morale) * rate - 1e-9));
+}
+
+export function mergedArmyUnits(existing, incoming) {
+  const groups = new Map();
+  for (const unit of existing) {
+    const strengths = unit.strengths.filter((strength) => strength > 0);
+    if (strengths.length) groups.set(unit.code, { ...unit, strengths: [...strengths], quantity: strengths.length });
+  }
+  for (const unit of incoming) {
+    let group = groups.get(unit.code);
+    if (group && group.initialStrength !== unit.initialStrength) return null;
+    if (!group) { group = { ...unit, strengths: [], quantity: 0 }; groups.set(unit.code, group); }
+    for (const strength of unit.strengths.filter((strength) => strength > 0)) {
+      // Keep overflowing formations intact: 30 + 80 remains [30, 80].
+      let fit = -1;
+      for (let index = 0; index < group.strengths.length; index += 1) {
+        if (group.strengths[index] + strength <= group.initialStrength && (fit < 0 || group.strengths[index] > group.strengths[fit])) fit = index;
+      }
+      if (fit >= 0) group.strengths[fit] += strength;
+      else group.strengths.push(strength);
+    }
+    group.quantity = group.strengths.length;
+  }
+  return [...groups.values()].filter((unit) => unit.quantity > 0);
+}
+
 function changeStrength(units, rate, recovering) {
   const entries = units.flatMap((unit, group) => unit.strengths.map((strength, index) => ({
     group, index, weight: recovering ? unit.initialStrength - strength : strength,

@@ -21,7 +21,7 @@ Property BoardWidth As %Integer(MINVAL = 1) [ InitialExpression = 15, Required ]
 Property BoardHeight As %Integer(MINVAL = 1) [ InitialExpression = 12, Required ];
 Property Terrain As %String(VALUELIST = ",DESERT,PLAINS") [ InitialExpression = "DESERT" ];
 Property CurrentRound As %Integer(MINVAL = 0) [ InitialExpression = 0, Required ];
-Property FinishReason As %String(VALUELIST = ",SURRENDER,ANNIHILATION");
+Property FinishReason As %String(VALUELIST = ",SURRENDER,ANNIHILATION,WITHDRAWAL");
 Property WinnerArmy As BronzeWars.Model.Army;
 Property DefeatedArmy As BronzeWars.Model.Army;
 Property CreatedAt As %TimeStamp [ InitialExpression = {$ZDATETIME($ZTIMESTAMP, 3, 1)}, Required ];

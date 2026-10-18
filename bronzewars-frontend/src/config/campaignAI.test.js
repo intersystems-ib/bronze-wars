@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeCampaignAI, rivalNations, needsRecruitmentDecision, maxRecruitableTroops, recruitmentCapacity, applyRecruitmentDecision } from './campaignAI.js';
+import { initializeCampaignAI, rivalNations, needsRecruitmentDecision, maxRecruitableTroops, recruitmentCapacity, automaticRecruitmentDecision, applyRecruitmentDecision } from './campaignAI.js';
 import { CAMPAIGN_HEXES, newCampaign, nextSeason, armyTroops, loadCampaign, campaignUpkeep } from './campaignRules.js';
 import { campaignView } from './campaignVisibility.js';
 
@@ -8,7 +8,7 @@ const catalogue = [
   { code: 'LIGHT_INFANTRY', initialStrength: 60, speed: 2, grainCost: 6, attack: 4, defense: 2, damage: 5 },
   { code: 'SPEARMEN', initialStrength: 100, speed: 1, grainCost: 6, attack: 5, defense: 6, damage: 7 },
 ];
-const recruit = (quantities = { LIGHT_INFANTRY: 2 }) => ({ action: 'recruit', quantities, reason: 'Defender la capital' });
+const recruit = (quantities = { LIGHT_INFANTRY: 4 }) => ({ action: 'recruit', quantities, reason: 'Defender la capital' });
 
 test('each rival starts with an independent reserve, preserving old loot and excluding Sea Peoples', () => {
   const original = { ...newCampaign('nubia'), foreignGrain: { egypt: 12 } };
@@ -64,7 +64,44 @@ test('capacity maximizes actual force with integer costs and formation limits ra
   }
 });
 
-test('LLM may spend reserves above sustainable capacity and in scarcity, without spending the human grain', () => {
+test('annual production and the cheapest four-division army gate model recruitment without blocking movement', () => {
+  const state = initializeCampaignAI(newCampaign());
+  const capacity = recruitmentCapacity(state, 'nubia', catalogue);
+  assert.equal(capacity.minimumDivisions, 4);
+  assert.equal(capacity.minimumArmyCost, 24);
+  assert.equal(automaticRecruitmentDecision({ ...capacity, annualConsumption: 21 }).blockReason, 'PRODUCTION_DEFICIT');
+  assert.equal(automaticRecruitmentDecision({ ...capacity, reserve: 23 }).blockReason, 'INSUFFICIENT_GRAIN');
+  assert.equal(automaticRecruitmentDecision({ ...capacity, reserve: 24, annualConsumption: 20 }), null);
+  assert.equal(automaticRecruitmentDecision({ ...capacity, annualConsumption: 19.99 }), null);
+  const skipped = applyRecruitmentDecision(state, 'nubia', automaticRecruitmentDecision({ ...capacity, reserve: 0 }), []);
+  assert.equal(needsRecruitmentDecision(skipped, 'nubia'), false);
+  assert.equal(skipped.aiRecruitment.nubia.source, 'RULES');
+  assert.equal(skipped.aiRecruitment.nubia.blockReason, 'INSUFFICIENT_GRAIN');
+  assert.deepEqual(skipped.armies, state.armies);
+  assert.equal(skipped.foreignGrain.nubia, 100);
+  assert.deepEqual(loadCampaign({ getItem: () => JSON.stringify(skipped) }), skipped);
+});
+
+test('minimum army costs use national prices, rounded reserves, and allow four divisions of one type', () => {
+  const state = initializeCampaignAI(newCampaign());
+  for (const [nation, cost] of [['egypt', 6], ['hatti', 4], ['nubia', 5]]) {
+    const national = [{ ...catalogue[0], grainCost: cost }];
+    const withGrain = { ...state, foreignGrain: { ...state.foreignGrain, [nation]: cost * 4 - 0.2 } };
+    const capacity = recruitmentCapacity(withGrain, nation, national);
+    assert.equal(capacity.reserve, cost * 4);
+    assert.equal(capacity.minimumArmyCost, cost * 4);
+    assert.equal(automaticRecruitmentDecision(capacity), null);
+    assert.ok(capacity.options.length > 0);
+    for (const option of capacity.options) {
+      assert.equal(Object.values(option.quantities).reduce((sum, count) => sum + count, 0), 4);
+      assert.ok(option.cost <= capacity.reserve);
+    }
+  }
+  for (const count of [1, 2, 3]) assert.throws(() => applyRecruitmentDecision(state, 'nubia', recruit({ SPEARMEN: count }), catalogue), /TOO_SMALL/);
+  assert.equal(applyRecruitmentDecision(state, 'nubia', recruit({ SPEARMEN: 4 }), catalogue).armies.length, 1);
+});
+
+test('recruitment may exceed sustainable capacity once, but the next deficit blocks further recruitment', () => {
   const initial = initializeCampaignAI(newCampaign());
   let state = applyRecruitmentDecision(initial, 'nubia', recruit({ SPEARMEN: 16 }), catalogue);
   assert.equal(state.grain, 100);
@@ -79,10 +116,10 @@ test('LLM may spend reserves above sustainable capacity and in scarcity, without
   assert.equal(applyRecruitmentDecision(state, 'nubia', recruit(), catalogue), state);
   state = { ...state, turn: 1, foreignGrain: { ...state.foreignGrain, nubia: 100 } };
   state.armies = state.armies.map((army) => ({ ...army, hexId: CAMPAIGN_HEXES.find((hex) => hex.territory === 'nubia' && !hex.city).id }));
-  const next = applyRecruitmentDecision(state, 'nubia', recruit(), catalogue);
-  assert.equal(next.armies.length, 2);
-  assert.equal(next.foreignGrain.nubia, 88);
-  assert.equal(next.grain, 100);
+  assert.throws(() => applyRecruitmentDecision(state, 'nubia', recruit(), catalogue), /AI_RECRUITMENT_BLOCKED/);
+  assert.equal(state.armies.length, 1);
+  assert.equal(state.foreignGrain.nubia, 100);
+  assert.equal(state.grain, 100);
 });
 
 test('wait, invalid orders, full capital regions and duplicate decisions never create or overspend armies', () => {
@@ -109,8 +146,8 @@ test('wait, invalid orders, full capital regions and duplicate decisions never c
 
 test('rivals pay upkeep every season, harvest only annually and preserve independent economic state in saves', () => {
   let state = applyRecruitmentDecision(initializeCampaignAI(newCampaign()), 'hatti', recruit(), catalogue);
-  assert.equal(state.foreignGrain.hatti, 88);
-  for (const expected of [87, 86, 115]) {
+  assert.equal(state.foreignGrain.hatti, 76);
+  for (const expected of [74, 72, 100]) {
     state = nextSeason(state);
     assert.equal(state.foreignGrain.hatti, expected);
     assert.equal(state.lastTurnReport.requiredGrain, 0);
@@ -123,11 +160,11 @@ test('rivals pay upkeep every season, harvest only annually and preserve indepen
 });
 
 test('rival famine and home-territory protection affect troop force without leaking reports to the player', () => {
-  let state = applyRecruitmentDecision(initializeCampaignAI(newCampaign()), 'nubia', recruit({ LIGHT_INFANTRY: 1 }), catalogue);
+  let state = applyRecruitmentDecision(initializeCampaignAI(newCampaign()), 'nubia', recruit({ LIGHT_INFANTRY: 4 }), catalogue);
   state.foreignGrain.nubia = 0;
   state.armies[0].hexId = CAMPAIGN_HEXES.find((hex) => hex.territory === 'nubia' && hex.terrain === 'desert').id;
   state = nextSeason(state);
-  assert.equal(armyTroops(state.armies[0]), 57);
+  assert.equal(armyTroops(state.armies[0]), 228);
   assert.deepEqual(state.lastTurnReport.armies, []);
 });
 
@@ -137,7 +174,7 @@ test('debug reveal shows remote enemy formations without changing normal human o
   assert.equal(normal.armies.length, 0);
   const debug = campaignView(state, 'egypt', { reveal: true });
   assert.equal(debug.visibleHexIds.size, CAMPAIGN_HEXES.length);
-  assert.equal(debug.armies[0].unitCount, 2);
+  assert.equal(debug.armies[0].unitCount, 4);
   assert.equal(debug.armies[0].own, false);
   assert.equal(debug.armies[0].units, undefined);
   assert.deepEqual(campaignView(state), normal);

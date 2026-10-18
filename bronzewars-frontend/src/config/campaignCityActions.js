@@ -1,5 +1,5 @@
 import { CAMPAIGN_CITIES } from './campaignCities.js';
-import { activeUnitCount, armyTroops, applyCasualties } from './campaignStrength.js';
+import { activeUnitCount, armyTroops, applyCasualties, wearMorale } from './campaignStrength.js';
 
 export const ASSAULT_EFFORT = 3000;
 export const ASSAULT_LOSS_RATE = 0.05;
@@ -15,8 +15,26 @@ export function cityOwner(campaign, city) {
   return campaign.cityOwners?.[city.id] ?? city.nation;
 }
 
+export function campaignCapital(campaign, nation = campaign.nation || 'egypt') {
+  if (!TERRITORIAL_NATIONS.includes(nation)) return null;
+  const controlled = CAMPAIGN_CITIES.filter((city) => cityOwner(campaign, city) === nation);
+  const original = controlled.find((city) => city.nation === nation && city.capital);
+  if (original) return original;
+  // Use regular output (including occupation), not a temporary raid's zero yield.
+  const production = (city) => city.grain * (city.nation === nation ? 1 : 0.5);
+  return controlled.sort((a, b) => production(b) - production(a) || a.number - b.number || a.id.localeCompare(b.id))[0] ?? null;
+}
+
+export function isCampaignCapital(campaign, city) {
+  return campaignCapital(campaign, cityOwner(campaign, city))?.id === city.id;
+}
+
 export function cityIncomeNation(campaign, city) {
   return cityRaid(campaign, city) ? null : cityOwner(campaign, city);
+}
+
+export function cityProduction(campaign, city) {
+  return cityRaid(campaign, city) ? 0 : city.grain * (cityOwner(campaign, city) === city.nation ? 1 : 0.5);
 }
 
 export function cityRaid(campaign, city) {
@@ -52,7 +70,7 @@ export function startCityAction(campaign, armyId, type, nation = campaign.nation
     } : {}) };
   });
   if (type === 'assault') return { ...campaign, armies: changedArmies };
-  const stolenGrain = Math.ceil(nationGrain(campaign, nation) - 1e-9) + city.grain;
+  const stolenGrain = Math.ceil(nationGrain(campaign, nation) + cityProduction(campaign, city) - 1e-9);
   return { ...campaign, armies: changedArmies,
     cityRaids: { ...campaign.cityRaids, [city.id]: { year: Math.floor(campaign.turn / 3), nation } },
     ...(nation === (campaign.nation || 'egypt') ? { grain: stolenGrain }
@@ -76,7 +94,7 @@ export function settleCityAssault(campaign, army) {
     return { army, losses: 0, capturedCity: null };
   }
   const casualties = applyCasualties(army.units, ASSAULT_LOSS_RATE);
-  const updated = { ...army, units: casualties.units, cityAction: { ...action, turnsElapsed: action.turnsElapsed + 1 } };
+  const updated = { ...army, units: casualties.units, morale: wearMorale(army.morale, ASSAULT_LOSS_RATE), cityAction: { ...action, turnsElapsed: action.turnsElapsed + 1 } };
   const capturedCity = armyTroops(updated) > 0 && updated.cityAction.turnsElapsed >= action.turnsRequired ? city : null;
   if (capturedCity) delete updated.cityAction;
   return { army: updated, losses: casualties.losses, capturedCity };

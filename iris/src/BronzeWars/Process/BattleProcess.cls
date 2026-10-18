@@ -41,6 +41,7 @@ Method OnRequest(request As BronzeWars.Message.Request, Output response As Bronz
             }
         }
         if unitCount = 0 return ..SetError(.response, 422, "EMPTY_ARMY", "El ejercito debe incluir al menos una unidad.")
+        if unitCount < ##class(BronzeWars.Rules.ArmyBudget).#MINUNITS return ..SetError(.response, 422, "ARMY_TOO_SMALL", "El ejercito debe incluir al menos cuatro divisiones.")
         if grain > ##class(BronzeWars.Rules.ArmyBudget).#TOTAL return ..SetError(.response, 422, "GRAIN_BUDGET_EXCEEDED", "La composicion supera las 100 unidades de grano disponibles.")
         if unitCount > (payload.boardWidth * 3) return ..SetError(.response, 422, "ARMY_TOO_LARGE", "El ejercito no cabe en la zona de despliegue.")
         do payload.%Set("units", normalized)
@@ -111,6 +112,10 @@ Method AdvanceTurnWithCommander(request As BronzeWars.Message.Request, Output re
         return $$$OK
     }
     set context = contextResult.data
+    if context.%GetTypeOf("battle")="object", context.battle.status="FINISHED" {
+        set response=contextResponse
+        return $$$OK
+    }
     set strategy = context.battleSituation.recommendedStrategy
     set source = "DETERMINISTIC_FALLBACK", decisionDiagnostic = ""
     set reasoning = "La estrategia se ha aplicado directamente desde el estado general de la batalla."

@@ -2,22 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import egyptMap from '../assets/map/egypt.png';
 import cityArtwork from '../assets/map/city.png';
 import { movementContext, needsMovementDecision, storeMovementDecision, pendingMovementOrder, executeMovementOrder, skipMovement, engageArmy, encounterPayload } from '../config/campaignMovement';
-import { resolveAIEncounter } from '../config/campaignCombat';
+import { resolveAIEncounter, pendingCombatReports, acknowledgeCombatReport } from '../config/campaignCombat';
 import { hexDistance } from '../config/campaignVisibility';
 import { campaignView } from '../config/campaignVisibility';
-import { disbandArmy, terrainAttrition } from '../config/campaignRules';
+import { disbandArmy, terrainAttrition, mergeArmies } from '../config/campaignRules';
 import { api } from '../api/client';
-import { rivalNations, needsRecruitmentDecision, initializeCampaignAI, recruitmentCapacity, applyRecruitmentDecision } from '../config/campaignAI';
+import { rivalNations, needsRecruitmentDecision, initializeCampaignAI, recruitmentCapacity, automaticRecruitmentDecision, applyRecruitmentDecision } from '../config/campaignAI';
 import { CAMPAIGN_CITIES } from '../config/campaignCities';
-import { cityAt, cityOwner, cityIncomeNation, cityRaid, assaultDuration, startCityAction, cancelCityAction } from '../config/campaignCityActions';
+import { cityAt, cityOwner, cityIncomeNation, cityProduction, cityRaid, assaultDuration, startCityAction, cancelCityAction, campaignCapital, isCampaignCapital } from '../config/campaignCityActions';
 import { getArmyDesign, getBattlefieldUnitArtwork, getUnitTypesForDesign } from '../config/armyDesigns';
-import { DEFAULT_ARMY_QUANTITIES } from '../config/armyRules';
+import { DEFAULT_ARMY_QUANTITIES, MIN_ARMY_DIVISIONS, minimumArmyCost } from '../config/armyRules';
 import { CAMPAIGN_HEXES, campaignTerritory, campaignTerritoryInfo, availableGrain, HEX_BY_ID, MAP_HEIGHT, MAP_WIDTH, SEASONS, remainingMovement, armyMovement, armyTroops, activeUnitCount, unitTroops, migrateCampaignStrength, campaignEconomy, findSpawn, moveArmy, nextSeason, reachableHexes, recruitArmy } from '../config/campaignRules';
 import { campaignSaveKey, createCampaignSave, writeCampaignSave, readCampaignSave, deleteCampaignSave, listCampaignSaves, importLegacyCampaigns } from '../config/campaignSaves';
 import { TERRAIN_TYPES } from '../config/campaignTerrain';
 import { CAMPAIGN_NATIONS, buildBorders } from '../config/campaignBorders';
 import { useI18n } from '../i18n/I18nContext';
 import ArmyBuilder from './ArmyBuilder';
+import CampaignMergeDialog from './CampaignMergeDialog';
 import UnitArtwork from './UnitArtwork';
 import CampaignNationSelection from './CampaignNationSelection';
 import CampaignStart, { CampaignSaveList } from './CampaignStart';
@@ -41,25 +42,27 @@ function TerrainDetails({ hex, campaign, contact, onBack, children }) {
     {contact && !contact.own && <p className="campaign-enemy-contact">{t('campaign.enemyContact', { nation: t(`campaign.nations.${contact.designId}`), count: contact.unitCount ?? '?' })}</p>}
     <dl>
       {regionCity && <div><dt>{t('campaign.region')}</dt><dd>{cityName(regionCity, t)}</dd></div>}
-      {hex.city && <div><dt>{t('campaign.settlement')}</dt><dd>{t(hex.city.capital ? 'campaign.capital' : 'campaign.city')}</dd></div>}
+      {hex.city && <div><dt>{t('campaign.settlement')}</dt><dd>{t(isCampaignCapital(campaign, hex.city) ? 'campaign.capital' : 'campaign.city')}</dd></div>}
       {hex.city && <div><dt>{t('campaign.terrainDetails')}</dt><dd>{t(`campaign.terrain.${hex.terrain}`)}</dd></div>}
       <div><dt>{t('campaign.territory')}</dt><dd>{campaignTerritory(campaign, hex) ? t(`campaign.nations.${campaignTerritory(campaign, hex)}`) : t('campaign.noTerritory')}</dd></div>
       {territory.occupied && <><div><dt>{t('campaign.occupation.status')}</dt><dd>{t('campaign.occupation.occupied')}</dd></div><div><dt>{t('campaign.occupation.originalOwner')}</dt><dd>{t(`campaign.nations.${territory.originalOwner}`)}</dd></div></>}
       {hex.city && <div><dt>{t('campaign.cityActions.incomeRecipient')}</dt><dd>{cityIncomeNation(campaign, hex.city) ? t(`campaign.nations.${cityIncomeNation(campaign, hex.city)}`) : t('campaign.cityActions.noHarvest')}</dd></div>}
       {hex.river && <div><dt>{t('campaign.river')}</dt><dd>{t(`campaign.rivers.${hex.river}`)}</dd></div>}
       <div><dt>{t('campaign.attrition')}</dt><dd>{terrainAttrition(campaign, hex) * 100} %</dd></div>
-      <div><dt>{t('campaign.annualProduction')}</dt><dd><span className="grain-glyph" aria-hidden="true">&#x131E3;</span> {hex.city && cityRaid(campaign, hex.city) ? 0 : hex.production}</dd></div>
+      <div><dt>{t('campaign.annualProduction')}</dt><dd><span className="grain-glyph" aria-hidden="true">&#x131E3;</span> {hex.city ? cityProduction(campaign, hex.city) : hex.production}</dd></div>
     </dl>
+    {territory.occupied && <p>{t('campaign.occupation.effects')}</p>}
     <p>{t(terrain.difficult ? 'campaign.difficultMovement' : hex.land ? 'campaign.normalMovement' : 'campaign.impassable')}</p>
     <small>{t('campaign.productionActive')}</small>
     <button className="button button--secondary" type="button" onClick={onBack}>{t('campaign.backToArmies')}</button>
   </section>;
 }
 
-function CampaignDecisionModal({ phase, revealMap }) {
+function CampaignDecisionModal({ phase, revealMap, onContinue }) {
   const { t } = useI18n();
   const dialog = useRef(null);
   const nationName = t(`campaign.nations.${phase.nation}`);
+  const result = phase.result;
 
   useEffect(() => {
     const element = dialog.current;
@@ -72,11 +75,17 @@ function CampaignDecisionModal({ phase, revealMap }) {
   return <dialog ref={dialog} className="campaign-ai-modal panel" aria-labelledby="campaign-ai-title" aria-describedby="campaign-ai-description" onCancel={(event) => event.preventDefault()}>
     <div role="status" aria-live="polite" aria-atomic="true">
       <img className="campaign-ai-emblem" src={getArmyDesign(phase.nation).logo} alt={t('campaign.ai.emblem', { nation: nationName })} />
-      <h2 id="campaign-ai-title">{t('campaign.ai.nationThinking', { nation: nationName })}</h2>
-      <p id="campaign-ai-description">{t(`campaign.ai.${phase.kind || 'recruitment'}Phase`)}</p>
+      <h2 id="campaign-ai-title">{result ? t('campaign.combat.resultTitle') : t('campaign.ai.nationThinking', { nation: nationName })}</h2>
+      <p id="campaign-ai-description">{result ? t(result.regional ? `campaign.combat.battleNames.${result.terrain}` : 'campaign.combat.battleNear', { city: t(`campaign.cityNames.${result.cityId}`), terrain: t(`campaign.terrain.${result.terrain}`) }) : t(`campaign.ai.${phase.kind || 'recruitment'}Phase`)}</p>
       <small>{t('campaign.ai.nationProgress', { current: phase.index + 1, total: phase.total })}</small>
     </div>
-    <progress aria-label={t(`campaign.ai.${phase.kind || 'recruitment'}Phase`)} />
+    {result ? <section className="campaign-ai-combat-result" aria-label={t('campaign.combat.resultTitle')}>
+      <p className="campaign-ai-victor">{t('campaign.combat.victor', { nation: t(`campaign.nations.${result.winnerNation}`) })}</p>
+      <p>{t('campaign.combat.nationLosses', { nation: t(`campaign.nations.${result.winnerNation}`), count: result.winnerLosses })}</p>
+      <p>{t('campaign.combat.nationLosses', { nation: t(`campaign.nations.${result.loserNation}`), count: result.loserLosses })}</p>
+      <p>{t(result.retreatHexId ? 'campaign.combat.defeatedRetreats' : 'campaign.combat.defeatedDestroyed', { nation: t(`campaign.nations.${result.loserNation}`) })}</p>
+      <button autoFocus className="button button--primary" type="button" onClick={onContinue}>{t('campaign.combat.continue')}</button>
+    </section> : <progress aria-label={t(`campaign.ai.${phase.kind || 'recruitment'}Phase`)} />}
     {revealMap && phase.kind === 'recruitment' && <p className="campaign-muted">{t('campaign.ai.deploymentSpace', { count: phase.freeHexes })}</p>}
   </dialog>;
 }
@@ -96,7 +105,7 @@ function ArmyRecruitment({ grain, nation, capital, unitTypes, loading, onClose, 
   const units = available.filter((unit) => quantities[unit.code] > 0).map((unit) => ({ ...unit, quantity: quantities[unit.code] }));
   const movement = armyMovement(units);
   const troops = units.reduce((sum, unit) => sum + unit.quantity * unit.initialStrength, 0);
-  const valid = !loading && units.length > 0 && cost <= grain;
+  const valid = !loading && units.reduce((sum, unit) => sum + unit.quantity, 0) >= MIN_ARMY_DIVISIONS && cost <= grain;
 
   useEffect(() => {
     const previousFocus = document.activeElement;
@@ -206,9 +215,11 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
   const [campaign, setCampaign] = useState(initialSave.campaign);
   const [selectedId, setSelectedId] = useState(null);
   const [disbandingId, setDisbandingId] = useState(null);
+  const [merging, setMerging] = useState(null);
   const [revealMap, setRevealMap] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiPhase, setAiPhase] = useState(null);
+  const combatContinuation = useRef(null);
   const [aiErrors, setAiErrors] = useState([]);
   const [aiRetry, setAiRetry] = useState(0);
   const [recruiting, setRecruiting] = useState(false);
@@ -224,11 +235,15 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
   const view = useMemo(() => campaignView(campaign, nation, { reveal: revealMap }), [campaign, nation, revealMap]);
   const ownArmies = useMemo(() => campaign.armies.filter((army) => army.designId === nation), [campaign.armies, nation]);
   const selected = ownArmies.find((army) => army.id === selectedId);
-  const aiPending = rivalNations(campaign).some((rival) => needsRecruitmentDecision(campaign, rival) || needsMovementDecision(campaign, rival));
+  const aiPending = pendingCombatReports(campaign).length > 0 || rivalNations(campaign).some((rival) => needsRecruitmentDecision(campaign, rival) || needsMovementDecision(campaign, rival));
   const campaignReady = campaign.version === 2 && !aiPending && !aiBusy && !campaign.pendingEncounter;
   const inspectedHex = HEX_BY_ID.get(inspectedId);
-  const capital = CAMPAIGN_CITIES.find((city) => city.nation === nation && city.capital);
+  const capital = campaignCapital(campaign, nation);
   const inspectingCapital = sidebarMode === 'terrain' && inspectedId === capital?.hexId && cityOwner(campaign, capital) === nation;
+  const mergeSource = campaign.armies.find((army) => army.id === merging?.sourceId);
+  const mergeTarget = campaign.armies.find((army) => army.id === merging?.targetId);
+  const mergePreview = merging ? mergeArmies(campaign, merging.sourceId, merging.targetId) : campaign;
+  const combinedArmy = mergePreview !== campaign ? mergePreview.armies.find((army) => army.id === merging.targetId) : null;
   const selectedCity = cityAt(selected?.hexId);
   const enemyCity = selectedCity && cityOwner(campaign, selectedCity) !== nation;
   const mapBorders = useMemo(() => buildBorders(CAMPAIGN_HEXES.map((hex) => ({ ...hex, territory: campaignTerritory(campaign, hex) }))), [campaign.cityOwners]);
@@ -240,7 +255,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
   const reachable = useMemo(() => reachableHexes(campaign, selectedId), [campaign, selectedId]);
   const occupied = useMemo(() => new Map(view.armies.map((army) => [army.hexId, army])), [view]);
   const grain = availableGrain(campaign.grain);
-  const cheapestUnit = Math.min(...getUnitTypesForDesign(unitTypes, nation).filter((unit) => unit.code !== 'MERCENARIES').map((unit) => unit.grainCost));
+  const cheapestUnit = minimumArmyCost(getUnitTypesForDesign(unitTypes, nation).filter((unit) => unit.code !== 'MERCENARIES'));
   const year = 1300 - Math.floor(campaign.turn / 3);
   const formattedYear = year > 0 ? t('campaign.yearBC', { year }) : t('campaign.yearAD', { year: 1 - year });
 
@@ -255,7 +270,6 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
       setAiBusy(true);
       setAiErrors([]);
       let current = migrateCampaignStrength(initializeCampaignAI(campaign), unitTypes);
-      if (current.pendingEncounter) current = resolveAIEncounter(current);
       const persist = (next) => {
         current = next;
         writeCampaignSave(localStorage, initialSave, current);
@@ -263,16 +277,31 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
       };
       const errors = [];
       const rivals = rivalNations(current).filter((rival) => needsRecruitmentDecision(current, rival) || needsMovementDecision(current, rival));
+      async function showCombatResults(meta) {
+        for (const result of pendingCombatReports(current)) {
+          setAiPhase({ ...meta, nation: meta.nation ?? result.attackerNation ?? result.winnerNation, kind: 'combat', result });
+          const continued = await new Promise((resolve) => { combatContinuation.current = resolve; });
+          if (!active || !continued) return false;
+          combatContinuation.current = null;
+          persist(acknowledgeCombatReport(current, result.id));
+        }
+        return true;
+      }
       try {
+        if (current.pendingEncounter) current = resolveAIEncounter(current);
         persist(current);
+        if (!await showCombatResults({ index: 0, total: Math.max(1, rivals.length) }) || !active) return;
         for (const [index, rival] of rivals.entries()) {
           let phase = 'recruitment';
           try {
             if (needsRecruitmentDecision(current, rival)) {
               const catalogue = getUnitTypesForDesign(unitTypes, rival).filter((unit) => unit.code !== 'MERCENARIES');
               const capacity = recruitmentCapacity(current, rival, catalogue);
-              setAiPhase({ nation: rival, index, total: rivals.length, kind: phase, freeHexes: capacity.freeDeploymentHexes });
-              const decision = await api.campaignRecruitment(capacity, controller.signal);
+              let decision = automaticRecruitmentDecision(capacity);
+              if (!decision) {
+                setAiPhase({ nation: rival, index, total: rivals.length, kind: phase, freeHexes: capacity.freeDeploymentHexes });
+                decision = await api.campaignRecruitment(capacity, controller.signal);
+              }
               if (!active) return;
               persist(applyRecruitmentDecision(current, rival, decision, catalogue));
             }
@@ -290,6 +319,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
                 if (current.armies.some((army) => participants.includes(army.id) && army.designId === nation)) break;
                 setAiPhase({ nation: rival, index, total: rivals.length, kind: 'combat' });
                 persist(resolveAIEncounter(current));
+                if (!await showCombatResults({ nation: rival, index, total: rivals.length }) || !active) return;
               }
             }
             if (current.pendingEncounter) break;
@@ -303,7 +333,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
       if (active) { setAiErrors(errors); setAiBusy(false); setAiPhase(null); }
     }
     decideRecruitment();
-    return () => { active = false; controller.abort(); };
+    return () => { active = false; controller.abort(); combatContinuation.current?.(false); combatContinuation.current = null; };
   }, [campaign.turn, campaign.version, loadingUnitTypes, unitTypes, aiRetry]);
 
   useEffect(() => {
@@ -358,6 +388,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
   }
 
   function inspectCapital() {
+    if (!capital) return;
     setSelectedId(null);
     setSidebarMode('terrain');
     setInspectedId(capital.hexId);
@@ -367,7 +398,10 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
   function activateHex(hex) {
     setInspectedId(hex.id);
     const army = occupied.get(hex.id);
-    if (army?.own) { setSelectedId(army.id); setSidebarMode('armies'); return; }
+    if (army?.own) {
+      if (campaignReady && selected && selected.id !== army.id && reachable.has(hex.id)) { setMerging({ sourceId: selected.id, targetId: army.id }); return; }
+      setSelectedId(army.id); setSidebarMode('armies'); return;
+    }
     if (army) { setSidebarMode('terrain'); return; }
     if (selected && reachable.has(hex.id)) {
       setCampaign((current) => moveArmy(current, selectedId, hex.id));
@@ -376,6 +410,15 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
     }
     setSelectedId(null);
     setSidebarMode('terrain');
+  }
+
+  function confirmMerge() {
+    const next = mergeArmies(campaign, merging.sourceId, merging.targetId);
+    setMerging(null);
+    if (next === campaign) return;
+    setCampaign(next);
+    focusArmy(next.armies.find((army) => army.id === merging.targetId));
+    setNotice(t('campaign.merge.completed'));
   }
 
   function recruit(input, available) {
@@ -391,7 +434,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
   function actOnCity(type) {
     if (!selected || !enemyCity) return;
     setCampaign((current) => startCityAction(current, selected.id, type));
-    setNotice(t(`campaign.cityActions.${type}Started`, { city: cityName(selectedCity, t), grain: selectedCity.grain }));
+    setNotice(t(`campaign.cityActions.${type}Started`, { city: cityName(selectedCity, t), grain: cityProduction(campaign, selectedCity) }));
   }
 
   function disband() {
@@ -410,7 +453,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
         <button className="button button--primary" type="button" disabled={!campaignReady} onClick={() => { setCampaign((current) => nextSeason(current)); setNotice(t('campaign.movementRestored')); }}>{t('campaign.endTurn')} <span aria-hidden="true">→</span></button>
       </header>
       {storageError && <p className="error-banner" role="alert">{t('campaign.storageError')}</p>}
-      {aiBusy && aiPhase && <CampaignDecisionModal phase={aiPhase} revealMap={revealMap} />}
+      {aiBusy && aiPhase && <CampaignDecisionModal phase={aiPhase} revealMap={revealMap} onContinue={() => combatContinuation.current?.(true)} />}
       {!aiBusy && aiErrors.length > 0 && <div className="error-banner" role="alert">
         <p>{t('campaign.ai.failed')}</p>
         <button type="button" className="button button--secondary" onClick={() => setAiRetry((value) => value + 1)}>{t('campaign.ai.retry')}</button>
@@ -441,7 +484,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
             </>}
           </TerrainDetails> : <>
           <div className="campaign-armies-heading"><h2>{selected ? selected.name || t('campaign.defaultArmyName', { number: selected.id }) : t('campaign.armies')}</h2>{!selected && <span>{ownArmies.length}</span>}</div>
-          {!selected && <button className="button button--secondary" type="button" onClick={inspectCapital}>{t('campaign.goToCapital', { city: cityName(capital, t) })}</button>}
+          {!selected && (capital ? <button className="button button--secondary" type="button" onClick={inspectCapital}>{t('campaign.goToCapital', { city: cityName(capital, t) })}</button> : <p className="campaign-muted">{t('campaign.noCapital')}</p>)}
           {!ownArmies.length && <div className="campaign-empty"><span aria-hidden="true">⚑</span><p>{t('campaign.empty')}</p></div>}
           <div className="campaign-armies">{(selected ? [selected] : ownArmies).map((army) => {
             const name = army.name || t('campaign.defaultArmyName', { number: army.id });
@@ -474,7 +517,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
           {selected && enemyCity && campaignReady && <section className="campaign-city-actions" aria-label={t('campaign.cityActions.title')}>
             <h3>{cityName(selectedCity, t)}</h3>
             <p>{t('campaign.cityActions.enemyCity', { nation: t(`campaign.nations.${cityOwner(campaign, selectedCity)}`) })}</p>
-            {!cityRaid(campaign, selectedCity) && <p>{t('campaign.cityActions.raidHelp', { grain: selectedCity.grain })}</p>}
+            {!cityRaid(campaign, selectedCity) && <p>{t('campaign.cityActions.raidHelp', { grain: cityProduction(campaign, selectedCity) })}</p>}
             <div className="campaign-city-action-buttons">
               <button className="button button--secondary" type="button" disabled={!campaignReady || Boolean(cityRaid(campaign, selectedCity))} onClick={() => actOnCity('raid')}>{t('campaign.cityActions.raid')}</button>
               <button className="button button--secondary" type="button" disabled={!campaignReady || selected.cityAction?.type === 'assault'} onClick={() => actOnCity('assault')}>{t('campaign.cityActions.assault')}</button>
@@ -509,12 +552,12 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
                 const positionLabel = army ? t('campaign.armyAt', { name: army.own ? `${army.name || t('campaign.defaultArmyName', { number: army.id })} · ${t('campaign.unitCount', { count: army.unitCount })}` : t('campaign.enemyContact', { nation: t(`campaign.nations.${army.designId}`), count: army.unitCount ?? '?' }), col: hex.col + 1, row: hex.row + 1 }) : t('campaign.hex', { col: hex.col + 1, row: hex.row + 1 });
                 const territory = campaignTerritoryInfo(campaign, hex);
                 const occupationLabel = territory.occupied ? t('campaign.occupation.description', { original: t(`campaign.nations.${territory.originalOwner}`), controller: t(`campaign.nations.${territory.controller}`) }) : '';
-                const label = `${occupationLabel ? `${occupationLabel} · ` : ''}${hex.city ? `${cityName(hex.city, t)} · ` : ''}${positionLabel} · ${t(`campaign.terrain.${hex.terrain}`)} · ${t('campaign.terrainAttrition', { rate: terrainAttrition(campaign, hex) * 100 })} · ${t('campaign.productionValue', { amount: hex.city && cityRaid(campaign, hex.city) ? 0 : hex.production })} · ${t(TERRAIN_TYPES[hex.terrain].difficult ? 'campaign.difficultMovement' : hex.land ? 'campaign.normalMovement' : 'campaign.impassable')}`;
+                const label = `${occupationLabel ? `${occupationLabel} · ` : ''}${hex.city ? `${cityName(hex.city, t)} · ` : ''}${positionLabel} · ${t(`campaign.terrain.${hex.terrain}`)} · ${t('campaign.terrainAttrition', { rate: terrainAttrition(campaign, hex) * 100 })} · ${t('campaign.productionValue', { amount: hex.city ? cityProduction(campaign, hex.city) : hex.production })} · ${t(TERRAIN_TYPES[hex.terrain].difficult ? 'campaign.difficultMovement' : hex.land ? 'campaign.normalMovement' : 'campaign.impassable')}`;
                 return <g key={hex.id} className={`campaign-hex ${!hex.land ? 'is-water' : ''} ${canMove ? 'is-reachable' : ''} ${active ? 'is-selected' : ''} ${army ? 'is-occupied' : ''} ${sidebarMode === 'terrain' && inspectedId === hex.id ? 'is-inspected' : ''}`} role="button" tabIndex={army || hex.city || canMove || inspectedId === hex.id ? 0 : -1} aria-label={label} onClick={() => activateHex(hex)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateHex(hex); } }}>
                   <title>{label}</title><polygon points={hex.points} />
                   {territory.occupied && <polygon points={hex.points} aria-hidden="true" pointerEvents="none" style={{ fill: 'url(#campaign-occupation-pattern)', stroke: 'none' }} />}
                   {hex.city && <g className="campaign-city" aria-hidden="true">
-                    {hex.city.capital && <circle className="campaign-capital-ring" cx={hex.x} cy={hex.y} r="21" style={{ stroke: CAMPAIGN_NATIONS[hex.city.nation].color }} />}
+                    {isCampaignCapital(campaign, hex.city) && <circle className="campaign-capital-ring" cx={hex.x} cy={hex.y} r="21" style={{ stroke: CAMPAIGN_NATIONS[cityOwner(campaign, hex.city)].color }} />}
                     <image href={cityArtwork} x={hex.x - 20} y={hex.y - 23} width="40" height="40" />
                     <circle className="campaign-city-owner" cx={hex.x - 14} cy={hex.y - 12} r="4" style={{ fill: CAMPAIGN_NATIONS[cityOwner(campaign, hex.city)].color }} />
                   </g>}
@@ -527,7 +570,7 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
                 <g fill="black">{CAMPAIGN_HEXES.filter((hex) => view.visibleHexIds.has(hex.id)).map((hex) => <polygon key={hex.id} points={hex.points} />)}</g>
               </mask></defs>
               <g className="campaign-fog" aria-hidden="true"><rect x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} mask="url(#campaign-vision-mask)" /></g>
-              <g className="campaign-city-labels" aria-hidden="true">{CAMPAIGN_HEXES.filter((hex) => hex.city).map((hex) => <text key={hex.id} className="campaign-city-name" x={hex.x} y={hex.y + 20} textAnchor="middle" opacity={view.visibleHexIds.has(hex.id) ? 1 : 0.3}>{hex.city.capital ? '★ ' : ''}{cityName(hex.city, t)}</text>)}</g>
+              <g className="campaign-city-labels" aria-hidden="true">{CAMPAIGN_HEXES.filter((hex) => hex.city).map((hex) => <text key={hex.id} className="campaign-city-name" x={hex.x} y={hex.y + 20} textAnchor="middle" opacity={view.visibleHexIds.has(hex.id) ? 1 : 0.3}>{isCampaignCapital(campaign, hex.city) ? '★ ' : ''}{cityName(hex.city, t)}</text>)}</g>
               <g className="campaign-army-markers" aria-hidden="true">{view.armies.map((army) => {
                 const hex = HEX_BY_ID.get(army.hexId);
                 return <g key={army.id} className={`campaign-army-marker ${army.own ? 'is-own' : 'is-enemy'}`} style={{ '--army-nation-color': CAMPAIGN_NATIONS[army.designId]?.color ?? '#43c7bf' }}>
@@ -549,10 +592,11 @@ function CampaignSession({ unitTypes, loadingUnitTypes, initialSave, onHome, onE
         <p>{t('campaign.consumptionReport', { consumed: formatGrain(report.consumedGrain), required: formatGrain(report.requiredGrain) })}</p>
         {report.situation && <p>{t(`campaign.situations.${report.situation}`)}</p>}
         {(report.capturedCities || []).filter((entry) => entry.previousOwner === nation && entry.newOwner !== nation).map((entry) => <p className="campaign-city-lost" key={entry.cityId}>{t('campaign.cityActions.lost', { city: t(`campaign.cityNames.${entry.cityId}`), nation: t(`campaign.nations.${entry.newOwner}`) })}</p>)}
-        <ul>{report.armies.filter((entry) => !campaign.armies.some((army) => army.id === entry.armyId && army.designId !== nation)).map((entry) => <li key={entry.armyId}><strong>{entry.name || t('campaign.defaultArmyName', { number: entry.armyId })}</strong><span>{t('campaign.lossReport', { terrain: entry.terrainLosses, supply: entry.supplyLosses })}</span>{entry.assaultLosses > 0 && <span>{t('campaign.cityActions.lossReport', { count: entry.assaultLosses })}</span>}{entry.capturedCityId && <span className="campaign-recovery">{t('campaign.cityActions.captured', { city: t(`campaign.cityNames.${entry.capturedCityId}`) })}</span>}{entry.recoveredUnits > 0 && <span className="campaign-recovery">{t('campaign.recoveryReport', { count: entry.recoveredUnits })}</span>}{entry.destroyed && <em>{t('campaign.armyDestroyed')}</em>}</li>)}</ul>
+        <ul>{report.armies.filter((entry) => !campaign.armies.some((army) => army.id === entry.armyId && army.designId !== nation)).map((entry) => <li key={entry.armyId}><strong>{entry.name || t('campaign.defaultArmyName', { number: entry.armyId })}</strong><span>{t('campaign.lossReport', { terrain: entry.terrainLosses, supply: entry.supplyLosses })}</span>{entry.assaultLosses > 0 && <span>{t('campaign.cityActions.lossReport', { count: entry.assaultLosses })}</span>}{entry.capturedCityId && <span className="campaign-recovery">{t('campaign.cityActions.captured', { city: t(`campaign.cityNames.${entry.capturedCityId}`) })}</span>}{entry.moraleLosses > 0 && <span>{t('campaign.moraleLossReport', { count: entry.moraleLosses })}</span>}{entry.recoveredMorale > 0 && <span className="campaign-recovery">{t('campaign.moraleRecoveryReport', { count: entry.recoveredMorale })}</span>}{entry.recoveredUnits > 0 && <span className="campaign-recovery">{t('campaign.recoveryReport', { count: entry.recoveredUnits })}</span>}{entry.destroyed && <em>{t('campaign.armyDestroyed')}</em>}</li>)}</ul>
       </section>}
       <p className="campaign-notice" role="status" aria-live="polite">{notice}</p>
-      {recruiting && <ArmyRecruitment grain={grain} nation={nation} capital={capital} unitTypes={unitTypes} loading={loadingUnitTypes} onClose={() => setRecruiting(false)} onRecruit={recruit} />}
+      {merging && mergeSource && mergeTarget && <CampaignMergeDialog source={mergeSource} target={mergeTarget} combined={combinedArmy} onCancel={() => setMerging(null)} onConfirm={confirmMerge} />}
+      {recruiting && capital && <ArmyRecruitment grain={grain} nation={nation} capital={capital} unitTypes={unitTypes} loading={loadingUnitTypes} onClose={() => setRecruiting(false)} onRecruit={recruit} />}
     </main>
   );
 }

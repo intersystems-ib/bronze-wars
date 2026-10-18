@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { CAMPAIGN_HEXES, CAMPAIGN_CITIES, HEX_BY_ID, neighbors, newCampaign, armyTroops, remainingMovement, nextSeason, loadCampaign, migrateCampaignStrength, campaignTerritoryInfo } from './campaignRules.js';
 import { hexDistance } from './campaignVisibility.js';
 import { movementContext, storeMovementDecision, executeMovementOrder, needsMovementDecision, pendingMovementOrder, engageArmy, applyEncounterResult } from './campaignMovement.js';
-import { resolveAIEncounter, campaignArmyPower } from './campaignCombat.js';
+import { resolveAIEncounter, campaignArmyPower, campaignBattleLocation, pendingCombatReports, acknowledgeCombatReport } from './campaignCombat.js';
 import { initializeCampaignAI, recruitmentCapacity, applyRecruitmentDecision } from './campaignAI.js';
 
 const type = { code: 'LIGHT_INFANTRY', quantity: 2, initialStrength: 60, strengths: [60, 60], speed: 2, grainCost: 6, attack: 4, defense: 4, damage: 5 };
@@ -247,4 +247,36 @@ test('winning an AI battle on a city under occupation starts the reconquest sieg
   assert.equal(survivor.cityAction?.type, 'assault');
   assert.equal(survivor.cityAction?.cityId, city.id);
   assert.equal(result.cityOwners[city.id], 'nubia');
+});
+
+
+test('AI battle results retain the battle terrain and region and survive reload until acknowledged without replaying combat', () => {
+  const powerful = army(1, 'hatti', pair.id, { units: [{ ...type, quantity: 10, strengths: Array(10).fill(60) }] });
+  const resolved = resolveAIEncounter(engageArmy(state([powerful, army(2, 'nubia', other.id)]), 1, 2, 'hatti'));
+  const report = pendingCombatReports(resolved)[0];
+  assert.equal(report.terrain, other.terrain);
+  assert.equal(report.cityId, other.regionId || campaignBattleLocation(other.id).cityId);
+  assert.equal(report.attackerNation, 'hatti');
+  assert.equal(report.winnerNation, 'hatti');
+  const loaded = loadCampaign({ getItem: () => JSON.stringify(resolved) }, 'egypt', { fallbackToNew: false });
+  assert.deepEqual(pendingCombatReports(loaded), [report]);
+  const acknowledged = acknowledgeCombatReport(loaded, report.id);
+  assert.deepEqual(pendingCombatReports(acknowledged), []);
+  assert.deepEqual(acknowledged.armies, resolved.armies);
+  assert.equal(acknowledged.campaignCombats[0].presented, true);
+  assert.equal(report.presented, false);
+  assert.equal(resolveAIEncounter(acknowledged), acknowledged);
+  assert.deepEqual(pendingCombatReports({ campaignCombats: [{ id: 'legacy' }] }), []);
+});
+
+test('battle names use the actual region city even if another city is closer, and neutral terrain uses the nearest settlement', () => {
+  for (const hex of CAMPAIGN_HEXES.filter((hex) => hex.regionId)) {
+    assert.deepEqual(campaignBattleLocation(hex.id), { terrain: hex.terrain, cityId: hex.regionId, regional: true });
+  }
+  const neutral = CAMPAIGN_HEXES.find((hex) => hex.land && !hex.regionId);
+  const location = campaignBattleLocation(neutral.id);
+  const city = CAMPAIGN_CITIES.find((city) => city.id === location.cityId);
+  assert.equal(location.regional, false);
+  assert.equal(location.terrain, neutral.terrain);
+  assert.ok(CAMPAIGN_CITIES.every((other) => hexDistance(neutral.id, city.hexId) <= hexDistance(neutral.id, other.hexId)));
 });

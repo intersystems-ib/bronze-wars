@@ -66,7 +66,7 @@ test('a looted city provides no harvest even if its owner recovers or captures t
   const captured = advance(state);
   assert.equal(cityOwner(captured, target), 'nubia');
   assert.equal(captured.lastTurnReport.producedGrain, 20);
-  assert.equal(campaignProduction(captured, 'nubia'), 25); // New year: city harvest resumes.
+  assert.equal(campaignProduction(captured, 'nubia'), 22.5); // New year: occupied city harvest resumes at half production.
 });
 
 test('assault takes exactly 3 turns at 1000 troops despite casualties, with no abundance recovery', () => {
@@ -88,7 +88,7 @@ test('assault takes exactly 3 turns at 1000 troops despite casualties, with no a
   }
   assert.equal(cityOwner(state, target), 'nubia');
   assert.equal(state.armies[0].cityAction, undefined);
-  assert.equal(state.lastTurnReport.producedGrain, 25);
+  assert.equal(state.lastTurnReport.producedGrain, 22.5);
   assert.equal(state.lastTurnReport.armies[0].capturedCityId, target.id);
   assert.equal(campaignProduction(state, 'egypt'), 26);
 });
@@ -138,7 +138,7 @@ test('capture changes the city hex ownership and vision without mutating other g
   assert.equal(cityOwner(baseline, city), 'hatti');
   assert.equal(HEX_BY_ID.get(city.hexId).territory, 'hatti');
   const defeatedOwner = { ...conquered, nation: 'hatti' };
-  assert.equal(findSpawn(defeatedOwner), null);
+  assert.equal(HEX_BY_ID.get(findSpawn(defeatedOwner)).regionId, 'hatti-3');
   assert.notEqual(findSpawn(conquered), city.hexId);
 });
 

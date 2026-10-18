@@ -82,7 +82,8 @@
     "addUnit": "Add {{unit}}",
     "removeUnit": "Remove {{unit}}",
     "overBudget": "The composition exceeds the {{total}}-grain budget.",
-    "emptyArmy": "Select at least one unit."
+    "emptyArmy": "Select at least one unit.",
+    "minimumDivisions": "The army must include at least {{count}} divisions."
   },
   "campaign": {
     "ai": {
@@ -163,6 +164,7 @@
     },
     "city": "City",
     "capital": "Capital",
+    "noCapital": "No controlled cities remain to establish a capital.",
     "settlement": "Settlement",
     "cityName": "{{nation}} · City {{number}}",
     "capitalName": "Capital of {{nation}}",
@@ -254,7 +256,7 @@
     "savedLocally": "Progress is saved automatically in this browser.",
     "storageError": "The campaign could not be saved in this browser. This session's progress will be lost when you close the page.",
     "map": "Egyptian campaign map",
-    "moveHint": "Choose a highlighted hex to move the selected army.",
+    "moveHint": "Select a reachable hex to move. Enter a friendly army’s hex to merge them.",
     "selectHint": "Select an army in the list or on the map.",
     "hex": "Hex {{col}}, {{row}}",
     "armyAt": "{{name}} · Hex {{col}}, {{row}}",
@@ -273,6 +275,15 @@
       "SPEARMEN": "Spearmen"
     },
     "combat": {
+      "resultTitle": "Battle result",
+      "victor": "Victor: {{nation}}",
+      "nationLosses": "{{nation}}: {{count}} casualties",
+      "defeatedRetreats": "The army of {{nation}} retreats.",
+      "defeatedDestroyed": "The army of {{nation}} has been destroyed.",
+      "continue": "Continue",
+      "battleNear": "Battle near {{city}} · {{terrain}}",
+      "battleNames": {"fertile": "Battle of the {{city}} valley", "desert": "Battle of the {{city}} desert", "mountain": "Battle of the {{city}} mountains", "coast": "Battle of the {{city}} coast", "water": "Battle of the waters of {{city}}"},
+
       "pending": "A battle is pending. Resolve it to continue the campaign.",
       "failed": "The battle could not be opened. You can try again.",
       "opening": "Opening battle…",
@@ -290,8 +301,19 @@
       "status": "Territory status",
       "occupied": "Occupied",
       "originalOwner": "Original owner",
-      "description": "Occupied {{original}} territory controlled by {{controller}}"
-    }
+      "description": "Occupied {{original}} territory controlled by {{controller}}",
+      "effects": "Production reduced to 50%. Occupying armies suffer no terrain attrition and recover neither troops nor morale. Famine and assaults still cause losses."
+    },
+    "merge": {
+      "title": "Merge armies",
+      "question": "Merge {{source}} into {{target}}?",
+      "summary": "Result: {{troops}} troops · {{divisions}} divisions · Morale: {{morale}}%",
+      "movement": "The combined army stays on the destination hex and cannot move again until the next season.",
+      "confirm": "Merge",
+      "completed": "Armies merged."
+    },
+    "moraleLossReport": "Morale lost: {{count}}.",
+    "moraleRecoveryReport": "Morale recovered: {{count}}."
   },
   "battle": {
     "battle": "Battle",
@@ -415,7 +437,8 @@
     "returnToStart": "Return to start",
     "reasons": {
       "SURRENDER": "The battle ended in surrender.",
-      "ANNIHILATION": "The defeated army has no surviving soldiers."
+      "ANNIHILATION": "The defeated army has no surviving soldiers.",
+      "WITHDRAWAL": "The defeated army has withdrawn from the battlefield."
     }
   },
   "errors": {
@@ -445,6 +468,7 @@
     "TARGET_OUT_OF_RANGE": "The target is outside this unit's range.",
     "NO_PROJECTILES": "This unit has no projectiles available for a ranged attack.",
     "INVALID_FACTION": "The selected faction is invalid.",
-    "UNKNOWN_ERROR": "An unexpected error occurred."
+    "UNKNOWN_ERROR": "An unexpected error occurred.",
+    "ARMY_TOO_SMALL": "The army must include at least 4 divisions."
   }
 }

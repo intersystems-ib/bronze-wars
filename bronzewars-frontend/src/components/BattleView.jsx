@@ -1,30 +1,10 @@
+import { armySurrenderMetrics } from '../config/battleMetrics';
 import { useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 import BattleBoard from './BattleBoard';
 import BattleEncounterModal from './BattleEncounterModal';
 import UnitInspector from './UnitInspector';
 import UnitRoster from './UnitRoster';
-
-function armySurrenderMetrics(army) {
-  const units = army?.units || [];
-  const initialSoldiers = units.reduce((total, unit) => (
-    total + Math.max(0, Number(unit.type?.initialStrength) || Number(unit.currentStrength) || 0)
-  ), 0);
-  const activeUnits = units.filter((unit) => unit.active !== false && Number(unit.currentStrength) > 0);
-  const survivingSoldiers = activeUnits.reduce(
-    (total, unit) => total + Math.max(0, Number(unit.currentStrength) || 0),
-    0,
-  );
-  const totalMorale = activeUnits.reduce(
-    (total, unit) => total + (Math.max(0, Number(unit.morale ?? 100)) * Math.max(0, Number(unit.currentStrength) || 0)),
-    0,
-  );
-
-  return {
-    troopPercentage: initialSoldiers > 0 ? Math.min(100, (survivingSoldiers / initialSoldiers) * 100) : 0,
-    moralePercentage: initialSoldiers > 0 ? Math.min(100, totalMorale / initialSoldiers) : 0,
-  };
-}
 
 function ArmyScore({ name, side, label, value, thresholds }) {
   const { t } = useI18n();

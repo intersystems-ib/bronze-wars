@@ -19,16 +19,38 @@ Method TestDeploymentContextVersion()
     do $$$AssertTrue(validation.ok, "A genuinely full region remains blocked")
 }
 
+Method TestAutomaticRecruitmentGate()
+{
+    set capacity={"nation":"nubia","reserve":100,"annualProduction":20,"consumptionPerTurn":7,"annualConsumption":21,"troops":400,"maxAffordableTroops":1000,"maxSustainableTroops":0,"turn":1,"turnsToHarvest":2,"capitalAvailable":true,"deploymentArea":"capital_region","freeDeploymentHexes":10,"units":[{"code":"LIGHT_INFANTRY","cost":5,"maxAffordable":20}],"options":[]}
+    &sql(SELECT COUNT(*) INTO :beforeTools FROM BronzeWars_AI_Audit.ToolExecution)
+    set result=##class(BronzeWars.AI.CampaignRecruitment).Decide(capacity)
+    do $$$AssertTrue(result.ok,"Production deficit returns a normal wait result")
+    do $$$AssertEquals(result.data.source,"RULES","Blocked recruitment bypasses the model")
+    do $$$AssertEquals(result.data.blockReason,"PRODUCTION_DEFICIT","Production is compared with three turns of upkeep")
+    set capacity.consumptionPerTurn=1, capacity.annualConsumption=3, capacity.reserve=19
+    set result=##class(BronzeWars.AI.CampaignRecruitment).Decide(capacity)
+    do $$$AssertEquals(result.data.blockReason,"INSUFFICIENT_GRAIN","Reserves below the cheapest four formations bypass the model")
+    &sql(SELECT COUNT(*) INTO :afterTools FROM BronzeWars_AI_Audit.ToolExecution)
+    do $$$AssertEquals(afterTools,beforeTools,"No recruitment tools or model sessions execute for either blocked case")
+    set capacity.reserve=20, capacity.consumptionPerTurn=6.666666666666667, capacity.annualConsumption=20
+    do $$$AssertEquals(##class(BronzeWars.AI.CampaignRecruitment).RecruitmentBlock(capacity),"","Exact minimum reserves and equal annual balance allow the decision")
+    set capacity.reserve=100, capacity.consumptionPerTurn=1, capacity.annualConsumption=3
+    do $$$AssertStatusNotOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","quantities":{"LIGHT_INFANTRY":3},"reason":"test"},capacity),"Three formations cannot be recruited")
+    do $$$AssertStatusOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","quantities":{"LIGHT_INFANTRY":4},"reason":"test"},capacity),"Four formations of one type can be recruited")
+    set capacity.consumptionPerTurn=7
+    do $$$AssertStatusNotOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","quantities":{"LIGHT_INFANTRY":4},"reason":"test"},capacity),"A model response cannot bypass a production deficit")
+}
+
 Method TestRecruitmentValidation()
 {
-    set capacity = {"reserve":20,"capitalAvailable":true,"maxSustainableTroops":0,"units":[{"code":"SPEARMEN","cost":6,"maxAffordable":3}],"options":[{"id":"small","quantities":{"SPEARMEN":2}}]}
-    do $$$AssertStatusOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","quantities":{"SPEARMEN":3},"reason":"Reservas"}, capacity), "Scarcity does not forbid affordable recruitment")
-    do $$$AssertStatusNotOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","quantities":{"SPEARMEN":4},"reason":""}, capacity), "Reserve limits are enforced")
+    set capacity = {"reserve":30,"capitalAvailable":true,"maxSustainableTroops":0,"units":[{"code":"SPEARMEN","cost":6,"maxAffordable":5}],"options":[{"id":"small","quantities":{"SPEARMEN":4}}]}
+    do $$$AssertStatusOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","quantities":{"SPEARMEN":4},"reason":"Reservas"}, capacity), "Scarcity does not forbid affordable recruitment")
+    do $$$AssertStatusNotOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","quantities":{"SPEARMEN":6},"reason":""}, capacity), "Reserve limits are enforced")
     do $$$AssertStatusNotOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","quantities":{"SPEARMEN":0.5},"reason":""}, capacity), "Fractional formations are rejected")
     do $$$AssertStatusNotOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","quantities":{"UNKNOWN":1},"reason":""}, capacity), "Unknown units are rejected")
     set answer = {"action":"recruit","optionId":"small","reason":"Defensa"}
     do $$$AssertStatusOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision(answer, capacity), "Calculated options are accepted")
-    do $$$AssertEquals(answer.quantities.SPEARMEN, 2, "Option expands to validated quantities")
+    do $$$AssertEquals(answer.quantities.SPEARMEN, 4, "Option expands to validated quantities")
     do $$$AssertStatusNotOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision({"action":"recruit","optionId":"unknown","reason":""}, capacity), "Unknown options are rejected")
     set capacity.capitalAvailable = 0
     do $$$AssertStatusNotOK(##class(BronzeWars.AI.CampaignRecruitment).ValidateDecision(answer, capacity), "Occupied capitals prevent recruitment")

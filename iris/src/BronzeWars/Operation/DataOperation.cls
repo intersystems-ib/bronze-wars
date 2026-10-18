@@ -377,6 +377,9 @@ Method PrepareAIMovement(battleId As %String, confirmIncomplete As %Boolean) As 
     set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
     if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
     if '$isobject(battle) return ##class(BronzeWars.Service.Result).Error(404, "BATTLE_NOT_FOUND", "La batalla no existe.")
+    set sc = ..ReconcileEmptyBattle(battle)
+    if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
+    if battle.Status="FINISHED" return ##class(BronzeWars.Service.Result).Success(200,{"battle":(##class(BronzeWars.API.Serializer).Battle(battle)),"aiMovementTrace":[],"aiCombatTrace":[],"humanRetreatTrace":[],"moraleRecoveryTrace":[]})
     if (battle.Status '= "IN_PROGRESS") ! (battle.Phase '= "MOVEMENT") return ##class(BronzeWars.Service.Result).Error(409, "INVALID_BATTLE_PHASE", "La batalla no esta en fase de movimiento.")
 
     &sql(SELECT COUNT(*) INTO :pendingUnits FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.Army a ON u.Army = a.%ID WHERE u.Battle = :battleId AND u.Active = 1 AND u.IsDeployed = 1 AND u.HasMoved = 0 AND a.Side = 'HUMAN')
@@ -858,7 +861,7 @@ Method EvaluateBattleConclusion(battle As BronzeWars.Model.Battle, Output surren
         set aiArmy.SurrenderPressureTurns = 0, aiArmy.SurrenderPressureRound = ""
         set sc = aiArmy.%Save()
         if $SYSTEM.Status.IsError(sc) return sc
-        return ..FinalizeBattle(battle, humanArmy, aiArmy, "ANNIHILATION", "")
+        return ..FinalizeBattle(battle, humanArmy, aiArmy, $select(aiMetrics.withdrawnSoldiers>0:"WITHDRAWAL",1:"ANNIHILATION"), "")
     }
     set surrenderEvaluation = ##class(BronzeWars.Rules.Surrender).Evaluate(aiMetrics.armyMorale, aiMetrics.troopPercentage, aiMetrics.moralePercentage, aiMetrics.survivingSoldiers, humanMetrics.survivingSoldiers, aiArmy.SurrenderPressureTurns)
     set aiArmy.SurrenderPressureTurns = 0, aiArmy.SurrenderPressureRound = ""
@@ -868,7 +871,7 @@ Method EvaluateBattleConclusion(battle As BronzeWars.Model.Battle, Output surren
     set sc = humanArmy.%Save()
     if $SYSTEM.Status.IsError(sc) return sc
 
-    if humanMetrics.survivingSoldiers <= 0 return ..FinalizeBattle(battle, aiArmy, humanArmy, "ANNIHILATION", "")
+    if humanMetrics.survivingSoldiers <= 0 return ..FinalizeBattle(battle, aiArmy, humanArmy, $select(humanMetrics.withdrawnSoldiers>0:"WITHDRAWAL",1:"ANNIHILATION"), "")
     if surrenderEvaluation.surrendered return ..FinalizeBattle(battle, humanArmy, aiArmy, "SURRENDER", surrenderEvaluation.reason)
     set humanEvaluation = ##class(BronzeWars.Rules.Surrender).EvaluateArmies(humanArmy, aiArmy)
     if humanEvaluation.surrendered {
@@ -927,11 +930,35 @@ Method FinalizeBattle(battle As BronzeWars.Model.Battle, winnerArmy As BronzeWar
 
 Method GetBattle(battleId As %String) As %DynamicObject [ Private ]
 {
-    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, , .sc)
+    set battle = ##class(BronzeWars.Model.Battle).%OpenId(battleId, 4, .sc)
     if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
     if '$isobject(battle) return ##class(BronzeWars.Service.Result).Error(404, "BATTLE_NOT_FOUND", "La batalla no existe.")
+    set sc = ..ReconcileEmptyBattle(battle)
+    if $SYSTEM.Status.IsError(sc) return ##class(BronzeWars.Service.Result).InternalError(sc)
     set hideAI = (battle.Phase = "DEPLOYMENT")
     return ##class(BronzeWars.Service.Result).Success(200, {"battle":(##class(BronzeWars.API.Serializer).Battle(battle, hideAI))})
+}
+
+Method ReconcileEmptyBattle(battle As BronzeWars.Model.Battle) As %Status [ Private ]
+{
+    // Recover already-open battles without another turn or an LLM decision.
+    if battle.Status'="IN_PROGRESS" return $$$OK
+    set battleId=battle.%Id()
+    &sql(SELECT COALESCE(SUM(CASE WHEN a.Side='HUMAN' THEN 1 ELSE 0 END),0), COALESCE(SUM(CASE WHEN a.Side='AI' THEN 1 ELSE 0 END),0)
+         INTO :humanUnits,:aiUnits FROM BronzeWars_Model.BattleUnit u JOIN BronzeWars_Model.Army a ON u.Army=a.%ID
+         WHERE u.Battle=:battleId AND u.Active=1 AND u.CurrentStrength>0)
+    if SQLCODE<0 return $$$ERROR($$$GeneralError,"Unable to check remaining combatants")
+    if (humanUnits>0) && (aiUnits>0) return $$$OK
+    tstart
+    try {
+        set sc=..EvaluateBattleConclusion(battle,.evaluation)
+        $$$ThrowOnError(sc)
+        tcommit
+        return $$$OK
+    } catch exception {
+        trollback 1
+        return exception.AsStatus()
+    }
 }
 
 Method GetDeployment(battleId As %String) As %DynamicObject [ Private ]

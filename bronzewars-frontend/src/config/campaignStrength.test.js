@@ -8,10 +8,11 @@ const catalogue = [
   { code: 'SPEARMEN', initialStrength: 100, speed: 1, grainCost: 6, attack: 5, defense: 6, damage: 7 },
   { code: 'CHARIOTS', initialStrength: 15, speed: 3, grainCost: 25, attack: 6, defense: 4, damage: 18 },
 ];
+// Existing/depleted rosters may be smaller than the new recruitment minimum.
 function armyWith(quantities, terrain = 'fertile', grain = 1000) {
-  const state = recruitArmy({ ...newCampaign(), grain }, { name: 'Nile', designId: 'egypt', quantities }, catalogue);
-  state.armies[0].hexId = CAMPAIGN_HEXES.find((hex) => hex.terrain === terrain).id;
-  return state;
+  const units = catalogue.filter((unit) => quantities[unit.code]).map((unit) => ({ ...unit, quantity: quantities[unit.code], strengths: Array(quantities[unit.code]).fill(unit.initialStrength) }));
+  const cost = units.reduce((sum, unit) => sum + unit.quantity * unit.grainCost, 0);
+  return { ...newCampaign(), grain: grain - cost, nextArmyId: 2, armies: [{ id: 1, name: 'Nile', designId: 'egypt', morale: 100, moved: 0, hexId: CAMPAIGN_HEXES.find((hex) => hex.terrain === terrain).id, units }] };
 }
 const settle = (state, production = 0) => nextSeason(state, { production });
 
@@ -117,11 +118,11 @@ test('an army with no surviving people is removed and cannot be resurrected by a
 
 test('recruitment requires actual force profiles and records a separate force for every unit', () => {
   const base = newCampaign();
-  const input = { name: 'Nile', designId: 'egypt', quantities: { LIGHT_INFANTRY: 2 } };
+  const input = { name: 'Nile', designId: 'egypt', quantities: { LIGHT_INFANTRY: 4 } };
   const invalid = catalogue.map(({ initialStrength, ...unit }) => unit);
   assert.equal(recruitArmy(base, input, invalid), base);
   const next = recruitArmy(base, input, catalogue);
-  assert.deepEqual(next.armies[0].units[0].strengths, [60,60]);
+  assert.deepEqual(next.armies[0].units[0].strengths, [60,60,60,60]);
 });
 
 test('existing saves migrate national force profiles without losing date, grain, names or locations', () => {
@@ -181,12 +182,12 @@ test('situation and grain settlement remain independent of individual troop loss
 
 test('27.8 grain funds a 28-grain army, leaves zero and cannot fund a 29-grain army', () => {
   const state = { ...newCampaign(), grain: 27.8 };
-  const input = { name: 'Rounded budget', designId: 'egypt', quantities: { LIGHT_INFANTRY: 1 } };
-  const next = recruitArmy(state, input, [{ ...catalogue[0], grainCost: 28 }]);
+  const input = { name: 'Rounded budget', designId: 'egypt', quantities: { LIGHT_INFANTRY: 4 } };
+  const next = recruitArmy(state, input, [{ ...catalogue[0], grainCost: 7 }]);
   assert.equal(availableGrain(state.grain), 28);
   assert.equal(next.armies.length, 1);
   assert.equal(next.grain, 0);
-  assert.equal(recruitArmy(state, input, [{ ...catalogue[0], grainCost: 29 }]), state);
+  assert.equal(recruitArmy(state, input, [{ ...catalogue[0], grainCost: 7.25 }]), state);
   assert.equal(availableGrain(28), 28);
   assert.equal(availableGrain(0), 0);
 });
@@ -205,14 +206,14 @@ test('fractional saved reserves and turn balances round up to whole spendable gr
 test('recruitment is locked to the chosen nation and deploys to that nation’s land', () => {
   for (const nation of PLAYABLE_NATIONS) {
     const state = newCampaign(nation);
-    const next = recruitArmy(state, { name: 'National army', designId: nation, quantities: { LIGHT_INFANTRY: 1 } }, catalogue);
+    const next = recruitArmy(state, { name: 'National army', designId: nation, quantities: { LIGHT_INFANTRY: 4 } }, catalogue);
     assert.equal(next.nation, nation);
     assert.equal(next.armies[0].designId, nation);
     const hex = HEX_BY_ID.get(next.armies[0].hexId);
     assert.equal(hex.territory, nation);
     assert.equal(hex.city.capital, true);
     const different = nation === 'egypt' ? 'nubia' : 'egypt';
-    assert.equal(recruitArmy(state, { name: '', designId: different, quantities: { LIGHT_INFANTRY: 1 } }, catalogue), state);
+    assert.equal(recruitArmy(state, { name: '', designId: different, quantities: { LIGHT_INFANTRY: 4 } }, catalogue), state);
     assert.equal(HEX_BY_ID.get(findSpawn(next)).regionId, hex.regionId);
     assert.notEqual(findSpawn(next), hex.id);
   }
@@ -239,13 +240,13 @@ test('Sea Peoples cannot be selected for campaigns, recruit armies or own produc
   assert.deepEqual(PLAYABLE_NATIONS, ['egypt', 'hatti', 'nubia']);
   const state = newCampaign('seapeople');
   assert.equal(findSpawn(state), null);
-  assert.equal(recruitArmy(state, { name: 'Invaders', designId: 'seapeople', quantities: { LIGHT_INFANTRY: 1 } }, catalogue), state);
+  assert.equal(recruitArmy(state, { name: 'Invaders', designId: 'seapeople', quantities: { LIGHT_INFANTRY: 4 } }, catalogue), state);
   assert.equal(campaignProduction(state), 0);
   assert.ok(CAMPAIGN_HEXES.every((hex) => hex.territory !== 'seapeople'));
 });
 
 test('legacy Hatti saves keep armies, calendar and reserves while adopting the new identity', () => {
-  const recruited = recruitArmy(newCampaign('hatti'), { name: 'Veterans', designId: 'hatti', quantities: { LIGHT_INFANTRY: 2 } }, catalogue);
+  const recruited = recruitArmy(newCampaign('hatti'), { name: 'Veterans', designId: 'hatti', quantities: { LIGHT_INFANTRY: 4 } }, catalogue);
   const legacy = { ...recruited, nation: LEGACY_HATTI_ID, turn: 14, grain: 27.8,
     armies: recruited.armies.map((army) => ({ ...army, designId: LEGACY_HATTI_ID })) };
   const oldKey = campaignStorageKey(LEGACY_HATTI_ID);

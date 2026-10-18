@@ -109,6 +109,9 @@
 .campaign-ai-modal p { color: var(--muted); font-size: .85rem; line-height: 1.6; }
 .campaign-ai-modal small { color: var(--muted); font-size: .75rem; }
 .campaign-ai-modal progress { display: block; width: 100%; margin-top: 1.25rem; accent-color: var(--bronze-bright); }
+.campaign-ai-combat-result { margin-top: 1.25rem; border-top: 1px solid #b78b5144; padding-top: .5rem; }
+.campaign-ai-combat-result .campaign-ai-victor { color: #efd39d; font-size: 1.05rem; font-weight: 700; }
+.campaign-ai-combat-result .button { margin-top: .75rem; }
 .campaign-disband { margin: .75rem 0; }
 .campaign-disband p { color: var(--muted); font-size: .73rem; line-height: 1.6; }
 .campaign-disband .button { font-size: .68rem; padding: .75rem .5rem; }
@@ -145,7 +148,7 @@
 .campaign-hex image, .campaign-hex text { pointer-events: none; }
 .campaign-fog, .campaign-army-markers { pointer-events: none; }
 .campaign-fog rect { fill: #090e18; fill-opacity: .7; }
-.campaign-army-marker circle { fill: #302516; fill-opacity: .9; stroke: #1a130b; stroke-width: 2; }
+.campaign-army-marker circle { fill: color-mix(in srgb, var(--army-nation-color) 35%, white); stroke: none; }
 .campaign-army-marker .campaign-army-outline { fill: none; stroke: var(--army-nation-color); stroke-width: 3; }
 .campaign-army-marker text { fill: white; stroke: #281d0e; stroke-width: 3; paint-order: stroke; font: bold 13px system-ui; }
 .campaign-fog-help { padding: 0 .9rem .8rem; margin: 0; color: var(--muted); font-size: .68rem; line-height: 1.5; }
@@ -200,3 +203,7 @@
 .campaign-delete-dialog p { color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
 
 .campaign-border-legend i.campaign-occupation-key { background: repeating-linear-gradient(125deg, transparent 0 3px, #e8c178 3px 5px); border: 1px solid #e8c178; }
+
+.campaign-merge-dialog { width: min(34rem, calc(100vw - 2rem)); margin: auto; padding: 2rem; color: var(--text); }
+.campaign-merge-dialog::backdrop { background: rgb(0 0 0 / 75%); }
+.campaign-merge-dialog p { color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }

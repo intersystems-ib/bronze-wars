@@ -1,31 +1,26 @@
-import { armyMovement, armyTroops, applyCasualties, campaignTerritory, neighbors } from './campaignRules.js';
+import { armyMovement, armyTroops, applyCasualties, HEX_BY_ID, CAMPAIGN_CITIES } from './campaignRules.js';
 import { hexDistance } from './campaignVisibility.js';
 import { startCityAction } from './campaignCityActions.js';
+import { retreatAfterBattle, markBattleArmiesProcessed } from './campaignRetreat.js';
+
+export function campaignBattleLocation(hexId) {
+  const hex = HEX_BY_ID.get(hexId);
+  const region = CAMPAIGN_CITIES.find((city) => city.id === hex.regionId);
+  const city = region ?? [...CAMPAIGN_CITIES].sort((a, b) => hexDistance(hexId, a.hexId) - hexDistance(hexId, b.hexId))[0];
+  return { terrain: hex.terrain, cityId: city.id, regional: Boolean(region) };
+}
+
+export function pendingCombatReports(campaign) {
+  return (campaign.campaignCombats || []).filter((report) => report.presented === false);
+}
+
+export function acknowledgeCombatReport(campaign, id) {
+  return { ...campaign, campaignCombats: campaign.campaignCombats.map((report) => report.id === id ? { ...report, presented: true } : report) };
+}
 
 export function campaignArmyPower(army) {
   return army.units.reduce((sum, unit) => sum + unit.strengths.reduce((total, strength) => total + strength, 0)
     * (unit.attack + unit.defense + unit.damage) / 3, 0) * (0.5 + (army.morale ?? 100) / 200);
-}
-
-function retreatHex(campaign, loser, winner, armies) {
-  const occupied = new Set(armies.filter((army) => army.id !== loser.id).map((army) => army.hexId));
-  const queue = [{ id: loser.hexId, distance: 0 }];
-  const visited = new Set([loser.hexId]);
-  const candidates = [];
-  for (let index = 0; index < queue.length; index += 1) {
-    const entry = queue[index];
-    if (entry.distance >= 3) continue;
-    for (const hex of neighbors(entry.id)) {
-      if (visited.has(hex.id) || occupied.has(hex.id)) continue;
-      visited.add(hex.id);
-      const distance = entry.distance + 1;
-      queue.push({ id: hex.id, distance });
-      if (hexDistance(hex.id, winner.hexId) >= 2) candidates.push({ hex, distance });
-    }
-  }
-  candidates.sort((a, b) => Number(campaignTerritory(campaign, b.hex) === loser.designId) - Number(campaignTerritory(campaign, a.hex) === loser.designId)
-    || a.distance - b.distance || hexDistance(b.hex.id, winner.hexId) - hexDistance(a.hex.id, winner.hexId));
-  return candidates[0]?.hex.id ?? null;
 }
 
 export function resolveAIEncounter(campaign) {
@@ -50,12 +45,14 @@ export function resolveAIEncounter(campaign) {
     moved: Math.ceil(armyMovement(loser.units)), campaignMission: { intent: 'RECOVER' } };
   delete losingArmy.cityAction;
   const others = campaign.armies.filter((army) => ![winner.id, loser.id].includes(army.id));
-  const retreat = armyTroops(losingArmy) > 0 ? retreatHex(campaign, losingArmy, winningArmy, [...others, winningArmy]) : null;
-  if (retreat) losingArmy.hexId = retreat;
-  const armies = [...others, winningArmy, ...(retreat ? [losingArmy] : [])].filter((army) => armyTroops(army) > 0);
+  const retreating = retreatAfterBattle(campaign, losingArmy, winningArmy, [...others, winningArmy]);
+  const retreat = retreating?.hexId ?? null;
+  const armies = [...others, winningArmy, ...(retreating ? [retreating] : [])].filter((army) => armyTroops(army) > 0);
   const report = { id: encounter.id, turn: campaign.turn, winnerId: winner.id, loserId: loser.id, winnerNation: winner.designId, loserNation: loser.designId,
-    winnerLosses: winnerLoss.losses, loserLosses: retreat ? loserLoss.losses : armyTroops(loser), retreatHexId: retreat, hexId: encounter.hexId };
-  let next = { ...campaign, armies, pendingEncounter: null, campaignCombats: [...(campaign.campaignCombats || []), report].slice(-50) };
+    winnerLosses: winnerLoss.losses, loserLosses: retreat ? loserLoss.losses : armyTroops(loser), retreatHexId: retreat, hexId: encounter.hexId,
+    retreatCityId: retreating?.campaignMission?.targetCityId ?? null,
+    ...campaignBattleLocation(encounter.hexId), attackerNation: attacker.designId, presented: false };
+  let next = markBattleArmiesProcessed({ ...campaign, armies, pendingEncounter: null, campaignCombats: [...(campaign.campaignCombats || []), report].slice(-50) }, [winner.id, loser.id]);
   if (winningArmy.campaignMission?.intent === 'RAID') next = startCityAction(next, winningArmy.id, 'raid', winningArmy.designId);
   if (['CONQUER', 'RECLAIM'].includes(winningArmy.campaignMission?.intent)) next = startCityAction(next, winningArmy.id, 'assault', winningArmy.designId);
   return next;

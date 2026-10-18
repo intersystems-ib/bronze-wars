@@ -64,11 +64,11 @@ test('new campaigns start from zero with separate IDs and do not reset existing 
 test('loading restores troops, position, movement, morale, grain and last-turn report exactly', () => {
   const storage = memoryStorage();
   const record = create(storage, 'full-state');
-  let state = recruitArmy(record.campaign, { name: 'Guard', designId: 'egypt', quantities: { LIGHT_INFANTRY: 2 } }, catalogue);
+  let state = recruitArmy(record.campaign, { name: 'Guard', designId: 'egypt', quantities: { LIGHT_INFANTRY: 4 } }, catalogue);
   state = nextSeason(state);
   state = moveArmy(state, 1, reachableHexes(state, 1).keys().next().value);
   state.armies[0].morale = 77;
-  state.armies[0].units[0].strengths = [44, 12];
+  state.armies[0].units[0].strengths = [44, 12, 0, 0];
   const saved = writeCampaignSave(storage, record, state, laterDate);
   assert.deepEqual(readCampaignSave(storage, record.id), saved);
   assert.equal(saved.createdAt, firstDate);

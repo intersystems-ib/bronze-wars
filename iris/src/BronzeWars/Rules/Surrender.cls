@@ -9,8 +9,8 @@ Parameter SURRENDERFORCESPERCENT = 33;
 
 ClassMethod Metrics(units As %DynamicArray) As %DynamicObject
 {
-    set survivingSoldiers = 0, initialSoldiers = 0, weightedMorale = 0
-    if '$isobject(units) return {"armyMorale":0,"initialSoldiers":0,"survivingSoldiers":0,"troopPercentage":0,"moralePercentage":0}
+    set survivingSoldiers = 0, initialSoldiers = 0, weightedMorale = 0, withdrawnSoldiers = 0
+    if '$isobject(units) return {"armyMorale":0,"initialSoldiers":0,"survivingSoldiers":0,"withdrawnSoldiers":0,"troopPercentage":0,"moralePercentage":0}
 
     for index = 0:1:(units.%Size()-1) {
         set unit = units.%Get(index)
@@ -19,7 +19,8 @@ ClassMethod Metrics(units As %DynamicArray) As %DynamicObject
         set initialStrength = +unit.%Get("initialStrength", soldiers)
         set active = unit.%Get("active", 1)
         if initialStrength > 0 set initialSoldiers = initialSoldiers + initialStrength
-        if 'active || soldiers <= 0 continue
+        if ('active) && (soldiers > 0) set withdrawnSoldiers = withdrawnSoldiers + soldiers
+        if ('active) || (soldiers <= 0) continue
         set survivingSoldiers = survivingSoldiers + soldiers
         set weightedMorale = weightedMorale + (+unit.%Get("morale", 0) * soldiers)
     }
@@ -30,7 +31,7 @@ ClassMethod Metrics(units As %DynamicArray) As %DynamicObject
         set troopPercentage = (survivingSoldiers * 100) / initialSoldiers
         set moralePercentage = weightedMorale / initialSoldiers
     }
-    return {"armyMorale":(armyMorale),"initialSoldiers":(initialSoldiers),"survivingSoldiers":(survivingSoldiers),"troopPercentage":(troopPercentage),"moralePercentage":(moralePercentage)}
+    return {"armyMorale":(armyMorale),"initialSoldiers":(initialSoldiers),"survivingSoldiers":(survivingSoldiers),"withdrawnSoldiers":(withdrawnSoldiers),"troopPercentage":(troopPercentage),"moralePercentage":(moralePercentage)}
 }
 
 ClassMethod Evaluate(armyMorale As %Numeric, troopPercentage As %Numeric, moralePercentage As %Numeric, ownSurvivingSoldiers As %Integer, enemySurvivingSoldiers As %Integer, surrenderPressureTurns As %Integer = 0) As %DynamicObject
@@ -94,7 +95,6 @@ ClassMethod ArmyUnits(army As BronzeWars.Model.Army) As %DynamicArray [ Private 
         if '$isobject(unit) continue
         set initialStrength = unit.UnitType.InitialStrength
         if $isobject(unit.UnitProfile) set initialStrength = unit.UnitProfile.InitialStrength
-        if unit.CampaignInitialStrength '= "" set initialStrength = unit.CampaignInitialStrength
         do units.%Push({"morale":(unit.Morale),"soldiers":(unit.CurrentStrength),"initialStrength":(initialStrength),"active":(unit.Active)})
     }
     &sql(CLOSE SurrenderUnitCursor)

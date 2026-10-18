@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ARMY_DESIGNS, getArmyDesign, getUnitTypesForDesign } from '../config/armyDesigns';
-import { DEFAULT_ARMY_QUANTITIES, GRAIN_BUDGET } from '../config/armyRules';
+import { DEFAULT_ARMY_QUANTITIES, GRAIN_BUDGET, MIN_ARMY_DIVISIONS } from '../config/armyRules';
 import { useI18n } from '../i18n/I18nContext';
 import ArmyBuilder from './ArmyBuilder';
 import UnitArtwork from './UnitArtwork';
@@ -18,10 +18,11 @@ export default function BattleSetup({ unitTypes, loadingUnitTypes, armyDesignId,
     .filter((unit) => unit.code !== 'MERCENARIES');
   const spent = availableUnitTypes.reduce((total, unit) => total + ((quantities[unit.code] || 0) * unit.grainCost), 0);
   const unitCount = availableUnitTypes.reduce((total, unit) => total + (quantities[unit.code] || 0), 0);
-  const validArmy = !loadingUnitTypes && unitCount > 0 && spent <= GRAIN_BUDGET && unitCount <= Number(width) * 3;
+  const validArmy = !loadingUnitTypes && unitCount >= MIN_ARMY_DIVISIONS && spent <= GRAIN_BUDGET && unitCount <= Number(width) * 3;
 
   function submitCreate(event) {
     event.preventDefault();
+    if (!validArmy || busy) return;
     onCreate({
       name: name.trim() || undefined,
       boardWidth: Number(width),

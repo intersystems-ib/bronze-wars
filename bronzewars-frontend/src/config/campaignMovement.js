@@ -1,15 +1,16 @@
-import { CAMPAIGN_CITIES, HEX_BY_ID, armyMovement, armyTroops, activeUnitCount, campaignProduction, campaignTerritory, occupiedRegions, moveArmy, neighbors, remainingMovement } from './campaignRules.js';
+import { CAMPAIGN_CITIES, HEX_BY_ID, armyMovement, armyTroops, activeUnitCount, campaignProduction, campaignTerritory, occupationGarrison, occupiedRegions, mergeArmies, moveArmy, neighbors, remainingMovement } from './campaignRules.js';
 import { campaignView, hexDistance } from './campaignVisibility.js';
-import { cityOwner, cityRaid, startCityAction } from './campaignCityActions.js';
+import { cityOwner, cityRaid, startCityAction, campaignCapital } from './campaignCityActions.js';
+import { retreatAfterBattle, markBattleArmiesProcessed } from './campaignRetreat.js';
 
-export const CAMPAIGN_INTENTS = ['DEFEND', 'RECLAIM', 'RECOVER', 'RAID', 'CONQUER', 'CONTINUE', 'HOLD'];
+export const CAMPAIGN_INTENTS = ['DEFEND', 'RECLAIM', 'MERGE', 'RETREAT', 'RECOVER', 'RAID', 'CONQUER', 'CONTINUE', 'HOLD'];
 export const ORDER_BATCH_SIZE = 4;
 const progress = (campaign, nation) => campaign.aiMovement?.[nation]?.turn === campaign.turn
   ? campaign.aiMovement[nation] : { turn: campaign.turn, decisions: [], processed: [] };
 
 export function needsMovementDecision(campaign, nation) {
   const processed = new Set(progress(campaign, nation).processed);
-  return campaign.armies.some((army) => army.designId === nation && armyTroops(army) > 0 && !processed.has(army.id));
+  return campaign.armies.some((army) => army.designId === nation && army.campaignMission?.intent !== 'RETREAT' && armyTroops(army) > 0 && !processed.has(army.id));
 }
 
 function pathsFrom(campaign, army, observation) {
@@ -43,16 +44,26 @@ function armyOptions(campaign, army, observation, invaders, occupied) {
       intent, targetHexId: destination, ...target, distance: path.length });
   };
   const visibleEnemies = observation.armies.filter((other) => !other.own);
+  const nearbyEnemies = visibleEnemies.filter((other) => hexDistance(army.hexId, other.hexId) <= 2)
+    .map(({ id, hexId, unitCount }) => ({ id, hexId, unitCount, distance: hexDistance(army.hexId, hexId) }));
+  const unitCount = army.units.reduce((sum, unit) => sum + activeUnitCount(unit), 0);
+  const strongerEnemies = nearbyEnemies.filter((other) => other.unitCount !== null && other.unitCount > unitCount);
+  const mergeCandidates = observation.armies.filter((other) => other.own && other.id !== army.id && pathTo(other.hexId))
+    .sort((a, b) => Number(b.id === army.campaignMission?.targetArmyId) - Number(a.id === army.campaignMission?.targetArmyId)
+      || hexDistance(army.hexId, a.hexId) - hexDistance(army.hexId, b.hexId)).slice(0, 2)
+    .map(({ id, hexId, unitCount: count }) => ({ id, hexId, unitCount: count, distance: pathTo(hexId).length }));
+  for (const ally of mergeCandidates) add('MERGE', ally.hexId, { targetArmyId: ally.id, recommended: strongerEnemies.length > 0 });
+  const advice = { armyId: army.id, unitCount, strongerEnemies, mergeCandidates, recommendMerge: strongerEnemies.length > 0 && mergeCandidates.length > 0 };
   const threats = invaders.length ? invaders : visibleEnemies.filter((other) => hexDistance(army.hexId, other.hexId) <= 1);
   for (const threat of [...threats].sort((a, b) => hexDistance(army.hexId, a.hexId) - hexDistance(army.hexId, b.hexId)).slice(0, 2)) {
     add('DEFEND', threat.hexId, { targetArmyId: threat.id });
   }
   const maximum = army.units.reduce((sum, unit) => sum + unit.quantity * unit.initialStrength, 0);
-  if (armyTroops(army) < maximum) {
+  if (armyTroops(army) < maximum || (army.morale ?? 100) < 100) {
     const ownHex = HEX_BY_ID.get(army.hexId);
-    if (campaignTerritory(campaign, ownHex) === army.designId) add('RECOVER', army.hexId);
+    if (campaignTerritory(campaign, ownHex) === army.designId && !occupationGarrison(campaign, army)) add('RECOVER', army.hexId);
     else {
-      const friendlyCities = CAMPAIGN_CITIES.filter((city) => cityOwner(campaign, city) === army.designId)
+      const friendlyCities = CAMPAIGN_CITIES.filter((city) => city.nation === army.designId && cityOwner(campaign, city) === army.designId)
         .sort((a, b) => hexDistance(army.hexId, a.hexId) - hexDistance(army.hexId, b.hexId));
       for (const city of friendlyCities) {
         const destination = [HEX_BY_ID.get(city.hexId), ...neighbors(city.hexId)].find((hex) => campaignTerritory(campaign, hex) === army.designId
@@ -83,7 +94,7 @@ function armyOptions(campaign, army, observation, invaders, occupied) {
     }
   }
   add('HOLD', army.hexId);
-  return { maximum, options };
+  return { maximum, options, nearbyEnemies, mergeCandidates, advice };
 }
 
 export function movementContext(campaign, nation) {
@@ -91,20 +102,24 @@ export function movementContext(campaign, nation) {
   const invaders = observation.armies.filter((army) => !army.own && campaignTerritory(campaign, HEX_BY_ID.get(army.hexId)) === nation);
   const occupied = occupiedRegions(campaign, nation);
   const state = progress(campaign, nation);
-  const pending = observation.armies.filter((army) => army.own && !state.processed.includes(army.id)).slice(0, ORDER_BATCH_SIZE);
+  const pending = observation.armies.filter((army) => army.own && army.campaignMission?.intent !== 'RETREAT' && !state.processed.includes(army.id)).slice(0, ORDER_BATCH_SIZE);
   const options = [];
+  const reinforcementAdvice = [];
   const armies = pending.map((army) => {
     const planned = armyOptions(campaign, army, observation, invaders, occupied);
     options.push(...planned.options);
+    reinforcementAdvice.push(planned.advice);
     return { id: army.id, hexId: army.hexId, troops: armyTroops(army), maximumTroops: planned.maximum,
-      morale: army.morale ?? 100, speed: armyMovement(army.units), remainingMovement: remainingMovement(army),
+      morale: army.morale ?? 100, unitCount: planned.advice.unitCount, nearbyEnemies: planned.nearbyEnemies, mergeCandidates: planned.mergeCandidates,
+      speed: armyMovement(army.units), remainingMovement: remainingMovement(army),
       mission: army.campaignMission?.intent ?? null,
       units: army.units.filter((unit) => activeUnitCount(unit) > 0).map((unit) => ({ code: unit.code, count: activeUnitCount(unit), speed: unit.speed,
         troops: unit.strengths.reduce((sum, strength) => sum + strength, 0), attack: unit.attack, defense: unit.defense, damage: unit.damage })) };
   });
   return { nation, turn: campaign.turn, priority: invaders.length ? 'DEFEND' : occupied.length ? 'RECLAIM' : 'FREE',
+    capitalCityId: campaignCapital(campaign, nation)?.id ?? null,
     reserve: campaign.foreignGrain?.[nation] ?? 0, annualProduction: campaignProduction(campaign, nation),
-    occupiedRegions: occupied, invaders: invaders.map(({ id, hexId, unitCount }) => ({ id, hexId, unitCount })), armies, options };
+    occupiedRegions: occupied, reinforcementAdvice, invaders: invaders.map(({ id, hexId, unitCount }) => ({ id, hexId, unitCount })), armies, options };
 }
 
 export function storeMovementDecision(campaign, nation, decision) {
@@ -117,8 +132,9 @@ export function storeMovementDecision(campaign, nation, decision) {
     seen.add(option.armyId);
     return option;
   });
-  if (context.priority === 'DEFEND' && context.options.some((option) => option.intent === 'DEFEND') && !orders.some((order) => order.intent === 'DEFEND')) throw new Error('INVASION_MUST_BE_DEFENDED');
-  if (context.priority === 'RECLAIM' && context.options.some((option) => option.intent === 'RECLAIM') && !orders.some((order) => order.intent === 'RECLAIM')) throw new Error('OCCUPIED_TERRITORY_MUST_BE_RECLAIMED');
+  const reinforcing = orders.some((order) => order.intent === 'MERGE' && order.recommended);
+  if (context.priority === 'DEFEND' && context.options.some((option) => option.intent === 'DEFEND') && !orders.some((order) => order.intent === 'DEFEND') && !reinforcing) throw new Error('INVASION_MUST_BE_DEFENDED');
+  if (context.priority === 'RECLAIM' && context.options.some((option) => option.intent === 'RECLAIM') && !orders.some((order) => order.intent === 'RECLAIM') && !reinforcing) throw new Error('OCCUPIED_TERRITORY_MUST_BE_RECLAIMED');
   const state = progress(campaign, nation);
   return { ...campaign, aiMovement: { ...campaign.aiMovement, [nation]: { ...state,
     decisions: [...state.decisions, ...orders], reason: decision.reason.slice(0, 500), source: 'LLM' } } };
@@ -159,10 +175,10 @@ export function executeMovementOrder(campaign, nation) {
   let army = current.armies.find((candidate) => candidate.id === order.armyId && candidate.designId === nation);
   if (!army) return current;
   const { cityId, targetArmyId, intent } = order;
-  army = { ...army, campaignMission: { intent, ...(cityId ? { targetCityId: cityId } : {}) } };
+  army = { ...army, campaignMission: { intent, ...(cityId ? { targetCityId: cityId } : {}), ...(intent === 'MERGE' && targetArmyId ? { targetArmyId } : {}) } };
   current = { ...current, armies: current.armies.map((candidate) => candidate.id === army.id ? army : candidate) };
   const observation = campaignView(current, nation);
-  const target = targetArmyId ? observation.armies.find((other) => other.id === targetArmyId && !other.own)?.hexId : order.targetHexId;
+  const target = targetArmyId ? observation.armies.find((other) => other.id === targetArmyId && (intent === 'MERGE' ? other.own : !other.own))?.hexId : order.targetHexId;
   const path = target && pathsFrom(current, army, observation)(target);
   if (path) for (const destination of path) {
     army = current.armies.find((candidate) => candidate.id === order.armyId);
@@ -170,6 +186,7 @@ export function executeMovementOrder(campaign, nation) {
     const occupant = current.armies.find((candidate) => candidate.hexId === destination);
     if (occupant) {
       if (occupant.designId !== nation) current = engageArmy(current, army.id, occupant.id, nation);
+      else if (intent === 'MERGE' && occupant.id === targetArmyId) current = mergeArmies(current, army.id, occupant.id, nation);
       break;
     }
     const next = moveArmy(current, army.id, destination, nation);
@@ -202,19 +219,38 @@ export function applyEncounterResult(campaign, battle, gameId) {
   const winner = battle.armies.find((army) => String(army.id) === String(battle.outcome.winnerArmyId));
   const winnerId = winner?.campaignArmyId;
   if (![encounter.attackerId, encounter.defenderId].includes(winnerId)) throw new Error('INVALID_CAMPAIGN_BATTLE_WINNER');
-  const updated = campaign.armies.filter((army) => ![encounter.attackerId, encounter.defenderId].includes(army.id) || army.id === winnerId).map((army) => {
-    if (army.id !== winnerId) return army;
+  const loserId = winnerId === encounter.attackerId ? encounter.defenderId : encounter.attackerId;
+  const rebuild = (army, resultArmy, fleeing = false) => {
+    if (!resultArmy) return null;
+    const included = [];
+    const slots = new Map(resultArmy.units.map((unit) => [unit.campaignSlot, unit]));
+    if (slots.size !== resultArmy.units.length) throw new Error('INVALID_CAMPAIGN_BATTLE_STRENGTH');
     const units = army.units.map((unit) => ({ ...unit, strengths: unit.strengths.map((old, index) => {
       if (old <= 0) return 0;
-      const result = winner.units.find((candidate) => candidate.campaignSlot === `${unit.code}:${index}`);
-      if (!result || !Number.isInteger(result.currentStrength) || result.currentStrength < 0 || result.currentStrength > old) throw new Error('INVALID_CAMPAIGN_BATTLE_STRENGTH');
-      return result.active ? result.currentStrength : 0;
+      const result = slots.get(`${unit.code}:${index}`);
+      if (!result || !Number.isInteger(result.currentStrength) || result.currentStrength < 0 || result.currentStrength > old
+        || !Number.isFinite(result.morale) || result.morale < 0 || result.morale > 100) throw new Error('INVALID_CAMPAIGN_BATTLE_STRENGTH');
+      const active = Boolean(result.active);
+      // Active defeated formations surrender as prisoners; only escaped ones return.
+      if (fleeing ? active : !active) return 0;
+      included.push(result);
+      return result.currentStrength;
     }) }));
     const troops = armyTroops({ units });
-    const morale = troops ? Math.round(winner.units.filter((unit) => unit.active).reduce((sum, unit) => sum + unit.currentStrength * unit.morale, 0) / troops) : 0;
-    return { ...army, units, morale, hexId: winnerId === encounter.attackerId ? encounter.hexId : army.hexId };
-  }).filter((army) => armyTroops(army) > 0);
-  let next = { ...campaign, armies: updated, pendingEncounter: null };
+    if (!troops) return null;
+    const morale = Math.round(included.reduce((sum, unit) => sum + unit.currentStrength * unit.morale, 0) / troops);
+    return { ...army, units, morale, moved: Math.ceil(armyMovement(units)) };
+  };
+  const winnerSource = campaign.armies.find((army) => army.id === winnerId);
+  const loserSource = campaign.armies.find((army) => army.id === loserId);
+  const winnerArmy = rebuild(winnerSource, winner);
+  if (!winnerArmy) throw new Error('INVALID_CAMPAIGN_BATTLE_WINNER');
+  winnerArmy.hexId = winnerId === encounter.attackerId ? encounter.hexId : winnerSource.hexId;
+  const others = campaign.armies.filter((army) => ![winnerId, loserId].includes(army.id));
+  const fled = rebuild(loserSource, battle.armies.find((army) => army.campaignArmyId === loserId), true);
+  const retreating = fled ? retreatAfterBattle(campaign, fled, winnerArmy, [...others, winnerArmy]) : null;
+  const updated = [...others, winnerArmy, ...(retreating ? [retreating] : [])];
+  let next = markBattleArmiesProcessed({ ...campaign, armies: updated, pendingEncounter: null }, [winnerId, loserId]);
   const survivor = next.armies.find((army) => army.id === winnerId);
   if (survivor?.campaignMission?.targetCityId) {
     if (['CONQUER', 'RECLAIM'].includes(survivor.campaignMission.intent)) next = startCityAction(next, survivor.id, 'assault', survivor.designId);

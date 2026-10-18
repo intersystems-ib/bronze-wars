@@ -2,6 +2,7 @@ Class BronzeWars.Rules.ArmyBudget Extends %RegisteredObject
 {
 
 Parameter TOTAL = 100;
+Parameter MINUNITS = 4;
 Parameter AIMaxUnits = 14;
 
 ClassMethod IsSupportedFaction(faction As %String) As %Boolean
@@ -188,6 +189,7 @@ ClassMethod ValidateComposition(composition As %DynamicArray, capacity As %Integ
         set totalGrain = totalGrain + (cost * quantity), totalUnits = totalUnits + quantity
     }
     if totalGrain '= ..#TOTAL return $$$ERROR($$$GeneralError, "Army composition must spend exactly " _ ..#TOTAL _ " grain measures")
+    if totalUnits < ..#MINUNITS return $$$ERROR($$$GeneralError, "Army composition requires at least four divisions")
     if totalUnits > capacity return $$$ERROR($$$GeneralError, "Army composition exceeds deployment capacity")
     return $$$OK
 }

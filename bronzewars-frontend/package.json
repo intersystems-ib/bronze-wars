@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "node src/config/campaignRules.test.js && node src/config/campaignStrength.test.js && node src/config/campaignVisibility.test.js && node src/config/campaignSaves.test.js && node src/config/campaignCityActions.test.js && node src/config/campaignRegions.test.js && node src/config/campaignAI.test.js && node src/config/campaignMovement.test.js",
+    "test": "node src/config/campaignCapitals.test.js && node src/config/battleMetrics.test.js && node src/config/campaignRules.test.js && node src/config/campaignStrength.test.js && node src/config/campaignVisibility.test.js && node src/config/campaignSaves.test.js && node src/config/campaignCityActions.test.js && node src/config/campaignRegions.test.js && node src/config/campaignAI.test.js && node src/config/campaignMovement.test.js && node src/config/campaignMerging.test.js",
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0"
